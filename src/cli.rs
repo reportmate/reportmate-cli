@@ -1,9 +1,9 @@
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
-#[command(name = "reportmate", version, about = "ReportMate admin CLI")]
+#[command(name = "reportmate", version, about = "ReportMate admin CLI — query and manage your device fleet")]
 pub struct Cli {
-    /// Output format
+    /// Output format (tables for humans, json for scripts and agents)
     #[arg(long, value_enum, default_value_t = OutputFormat::Table, global = true)]
     pub output: OutputFormat,
 
@@ -13,15 +13,75 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// List all devices in the fleet
-    Devices,
-    /// Show a single device by serial number
+    /// List devices in the fleet
+    Devices {
+        /// Maximum devices to return (1-1000)
+        #[arg(long)]
+        limit: Option<u32>,
+        /// Pagination offset
+        #[arg(long)]
+        offset: Option<u32>,
+        /// Include archived devices
+        #[arg(long)]
+        include_archived: bool,
+    },
+    /// Show a single device by serial number (all modules)
     Device {
         /// Device serial number
         serial: String,
+        /// Show only one module document (e.g. hardware, installs, network)
+        #[arg(long)]
+        module: Option<String>,
     },
-    /// Fleet-wide applications report
-    Applications,
+    /// Fleet-wide report for any module (hardware, applications, installs,
+    /// network, security, management, inventory, system, peripherals,
+    /// identity — plus variants like installs/full or security/certificates)
+    Module {
+        /// Module path under /api/v1/ (e.g. "hardware", "installs/full")
+        name: String,
+        /// Extra query parameters as key=value (repeatable)
+        #[arg(long = "param", value_name = "KEY=VALUE")]
+        params: Vec<String>,
+    },
+    /// Recent fleet events
+    Events {
+        /// Maximum events to return
+        #[arg(long)]
+        limit: Option<u32>,
+    },
+    /// API health (liveness; --ready adds the database probe)
+    Health {
+        /// Check readiness (database connectivity) instead of liveness
+        #[arg(long)]
+        ready: bool,
+    },
+    /// Manage per-client API keys (admin scope)
+    #[command(subcommand)]
+    ApiKeys(ApiKeysCommand),
+    /// GET any /api/v1 path and print the JSON (escape hatch)
+    Raw {
+        /// Path under the API root, e.g. /api/v1/dashboard
+        path: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ApiKeysCommand {
+    /// List issued API keys
+    List,
+    /// Create a key: prints the secret once
+    Create {
+        /// Client name for the key
+        name: String,
+        /// Scopes (read, ingest, admin; repeatable)
+        #[arg(long = "scope", default_values_t = vec![String::from("read")])]
+        scopes: Vec<String>,
+    },
+    /// Revoke a key by id
+    Revoke {
+        /// Key id
+        key_id: String,
+    },
 }
 
 #[derive(Copy, Clone, ValueEnum)]
