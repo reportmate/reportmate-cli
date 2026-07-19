@@ -71,7 +71,7 @@ pub enum ApiKeysCommand {
     List,
     /// Create a key: prints the secret once
     Create {
-        /// Client name for the key
+        /// Client id / owner label for the key
         name: String,
         /// Scopes (read, ingest, admin; repeatable)
         #[arg(long = "scope", default_values_t = vec![String::from("read")])]
