@@ -1,7 +1,15 @@
 use clap::{Parser, Subcommand, ValueEnum};
 
+/// Release builds stamp the calendar version (YYYY.MM.DD.HHMM, from the git
+/// tag) via the RM_VERSION build-time env; dev builds fall back to the Cargo
+/// package version.
+pub const VERSION: &str = match option_env!("RM_VERSION") {
+    Some(v) => v,
+    None => env!("CARGO_PKG_VERSION"),
+};
+
 #[derive(Parser)]
-#[command(name = "reportmate", version, about = "ReportMate admin CLI — query and manage your device fleet")]
+#[command(name = "reportmate", version = VERSION, about = "ReportMate admin CLI — query and manage your device fleet")]
 pub struct Cli {
     /// Output format (tables for humans, json for scripts and agents)
     #[arg(long, value_enum, default_value_t = OutputFormat::Table, global = true)]

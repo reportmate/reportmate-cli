@@ -19,7 +19,7 @@ impl Client {
     pub fn new(cfg: Config) -> Result<Client> {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(120))
-            .user_agent(concat!("reportmate-cli/", env!("CARGO_PKG_VERSION")))
+            .user_agent(format!("reportmate-cli/{}", crate::cli::VERSION))
             .build()?;
         Ok(Client { http, cfg })
     }
