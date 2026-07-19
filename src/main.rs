@@ -115,7 +115,7 @@ async fn main() -> Result<()> {
                 output::print_json(&data);
             }
             ApiKeysCommand::Create { name, scopes } => {
-                let body = json!({ "name": name, "scopes": scopes });
+                let body = json!({ "client_id": name, "scopes": scopes });
                 let data = client.post("/api/v1/admin/api-keys", &body).await?;
                 output::print_json(&data);
             }
