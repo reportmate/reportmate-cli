@@ -34,8 +34,25 @@ fn urlencode(s: &str) -> String {
         .collect()
 }
 
+/// Restore the default SIGPIPE disposition.
+///
+/// Rust ignores SIGPIPE by default, so a consumer that closes stdout early
+/// (e.g. `reportmate devices | head`) turns the next write into a panic
+/// ("failed printing to stdout: Broken pipe") instead of a clean exit.
+/// Restoring SIG_DFL makes the process terminate normally, like any Unix tool.
+#[cfg(unix)]
+fn reset_sigpipe() {
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+
+#[cfg(not(unix))]
+fn reset_sigpipe() {}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    reset_sigpipe();
     let args = Cli::parse();
     let cfg = config::Config::load()?;
     let client = client::Client::new(cfg)?;

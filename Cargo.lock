@@ -782,6 +782,7 @@ dependencies = [
  "anyhow",
  "clap",
  "comfy-table",
+ "libc",
  "reqwest",
  "serde",
  "serde_json",
