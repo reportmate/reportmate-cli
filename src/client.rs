@@ -56,7 +56,8 @@ impl Client {
 
     pub async fn post(&self, path: &str, body: &Value) -> Result<Value> {
         let url = format!("{}{}", self.cfg.api_url, path);
-        self.send(self.http.post(&url).json(body), "POST", path).await
+        self.send(self.http.post(&url).json(body), "POST", path)
+            .await
     }
 
     pub async fn delete(&self, path: &str) -> Result<Value> {

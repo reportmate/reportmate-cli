@@ -137,3 +137,40 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{query_string, urlencode};
+
+    #[test]
+    fn urlencode_leaves_unreserved_chars() {
+        assert_eq!(urlencode("aZ09-_.~"), "aZ09-_.~");
+    }
+
+    #[test]
+    fn urlencode_percent_encodes_reserved() {
+        assert_eq!(urlencode("a b"), "a%20b");
+        assert_eq!(urlencode("k=v&x"), "k%3Dv%26x");
+        assert_eq!(urlencode("/full"), "%2Ffull");
+    }
+
+    #[test]
+    fn urlencode_handles_multibyte_utf8() {
+        // é is two UTF-8 bytes; both must be percent-encoded.
+        assert_eq!(urlencode("é"), "%C3%A9");
+    }
+
+    #[test]
+    fn query_string_empty_when_no_pairs() {
+        assert_eq!(query_string(&[]), "");
+    }
+
+    #[test]
+    fn query_string_joins_and_encodes() {
+        let pairs = vec![
+            ("limit".to_string(), "10".to_string()),
+            ("q".to_string(), "a b".to_string()),
+        ];
+        assert_eq!(query_string(&pairs), "?limit=10&q=a%20b");
+    }
+}
