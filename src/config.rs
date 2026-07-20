@@ -8,11 +8,15 @@ use anyhow::{bail, Result};
 /// - `REPORTMATE_PASSPHRASE` — the legacy shared client passphrase, sent as
 ///   `X-Client-Passphrase`.
 ///
+/// `REPORTMATE_INTERNAL_SECRET` is optional and only needed for internal-only
+/// writes (currently `settings set`), sent as `X-Internal-Secret`.
+///
 /// A future revision can add a config file (`~/.config/reportmate/config.toml`)
 /// and named profiles for multiple instances.
 pub struct Config {
     pub api_url: String,
     pub credential: Credential,
+    pub internal_secret: Option<String>,
 }
 
 pub enum Credential {
@@ -35,9 +39,14 @@ impl Config {
             bail!("no credential: set REPORTMATE_API_KEY (preferred) or REPORTMATE_PASSPHRASE");
         };
 
+        let internal_secret = std::env::var("REPORTMATE_INTERNAL_SECRET")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
+
         Ok(Config {
             api_url: api_url.trim_end_matches('/').to_string(),
             credential,
+            internal_secret,
         })
     }
 }
