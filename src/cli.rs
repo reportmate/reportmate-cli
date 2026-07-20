@@ -63,13 +63,65 @@ pub enum Command {
         #[arg(long)]
         ready: bool,
     },
+    /// Archive a device (admin scope)
+    Archive {
+        /// Device serial number
+        serial: String,
+    },
+    /// Unarchive a device (admin scope)
+    Unarchive {
+        /// Device serial number
+        serial: String,
+    },
+    /// Permanently delete a device and all its data (admin scope)
+    Delete {
+        /// Device serial number
+        serial: String,
+        /// Required to actually delete — without it the call is refused
+        #[arg(long)]
+        confirm: bool,
+    },
     /// Manage per-client API keys (admin scope)
     #[command(subcommand)]
     ApiKeys(ApiKeysCommand),
+    /// Administrative maintenance operations (admin scope)
+    #[command(subcommand)]
+    Admin(AdminCommand),
+    /// Read or write server-side org settings
+    #[command(subcommand)]
+    Settings(SettingsCommand),
     /// GET any /api/v1 path and print the JSON (escape hatch)
     Raw {
         /// Path under the API root, e.g. /api/v1/dashboard
         path: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AdminCommand {
+    /// Delete usage-history rows older than the retention window
+    CleanupUsage {
+        /// Retain data for this many months (1-36)
+        #[arg(long, default_value_t = 18)]
+        months: u32,
+    },
+    /// Clear stale install errors/warnings from long-absent devices
+    ClearErrors {
+        /// Clear for devices not seen in this many days (1-365)
+        #[arg(long, default_value_t = 10)]
+        days: u32,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SettingsCommand {
+    /// Show the current org settings
+    Get,
+    /// Replace the org settings with a JSON document (requires
+    /// REPORTMATE_INTERNAL_SECRET)
+    Set {
+        /// Settings as a JSON object, or @path to read from a file
+        json: String,
     },
 }
 

@@ -7,7 +7,7 @@ use anyhow::{bail, Result};
 use clap::Parser;
 use serde_json::json;
 
-use cli::{ApiKeysCommand, Cli, Command, OutputFormat};
+use cli::{AdminCommand, ApiKeysCommand, Cli, Command, OutputFormat, SettingsCommand};
 
 fn query_string(pairs: &[(String, String)]) -> String {
     if pairs.is_empty() {
@@ -140,6 +140,60 @@ async fn main() -> Result<()> {
                 let data = client
                     .delete(&format!("/api/v1/admin/api-keys/{key_id}"))
                     .await?;
+                output::print_json(&data);
+            }
+        },
+        Command::Archive { serial } => {
+            let data = client
+                .patch(&format!("/api/v1/device/{serial}/archive"))
+                .await?;
+            output::print_json(&data);
+        }
+        Command::Unarchive { serial } => {
+            let data = client
+                .patch(&format!("/api/v1/device/{serial}/unarchive"))
+                .await?;
+            output::print_json(&data);
+        }
+        Command::Delete { serial, confirm } => {
+            if !confirm {
+                bail!("refusing to delete {serial} without --confirm");
+            }
+            let data = client
+                .delete(&format!("/api/v1/device/{serial}?confirm=true"))
+                .await?;
+            output::print_json(&data);
+        }
+        Command::Admin(cmd) => match cmd {
+            AdminCommand::CleanupUsage { months } => {
+                let data = client
+                    .delete(&format!(
+                        "/api/v1/admin/usage-history/cleanup?months={months}"
+                    ))
+                    .await?;
+                output::print_json(&data);
+            }
+            AdminCommand::ClearErrors { days } => {
+                let data = client
+                    .delete(&format!("/api/v1/admin/installs/clear-errors?days={days}"))
+                    .await?;
+                output::print_json(&data);
+            }
+        },
+        Command::Settings(cmd) => match cmd {
+            SettingsCommand::Get => {
+                let data = client.get("/api/v1/settings").await?;
+                output::print_json(&data);
+            }
+            SettingsCommand::Set { json } => {
+                let raw = if let Some(path) = json.strip_prefix('@') {
+                    std::fs::read_to_string(path)?
+                } else {
+                    json
+                };
+                let body: serde_json::Value = serde_json::from_str(&raw)
+                    .map_err(|e| anyhow::anyhow!("settings must be valid JSON: {e}"))?;
+                let data = client.put("/api/v1/settings", &body).await?;
                 output::print_json(&data);
             }
         },

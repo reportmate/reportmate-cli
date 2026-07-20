@@ -25,9 +25,15 @@ impl Client {
     }
 
     fn authed(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        match &self.cfg.credential {
+        let req = match &self.cfg.credential {
             Credential::ApiKey(k) => req.header("X-API-Key", k),
             Credential::Passphrase(p) => req.header("X-Client-Passphrase", p),
+        };
+        // Internal secret authorizes internal-only writes (e.g. settings);
+        // harmless on other requests.
+        match &self.cfg.internal_secret {
+            Some(s) => req.header("X-Internal-Secret", s),
+            None => req,
         }
     }
 
@@ -63,5 +69,15 @@ impl Client {
     pub async fn delete(&self, path: &str) -> Result<Value> {
         let url = format!("{}{}", self.cfg.api_url, path);
         self.send(self.http.delete(&url), "DELETE", path).await
+    }
+
+    pub async fn patch(&self, path: &str) -> Result<Value> {
+        let url = format!("{}{}", self.cfg.api_url, path);
+        self.send(self.http.patch(&url), "PATCH", path).await
+    }
+
+    pub async fn put(&self, path: &str, body: &Value) -> Result<Value> {
+        let url = format!("{}{}", self.cfg.api_url, path);
+        self.send(self.http.put(&url).json(body), "PUT", path).await
     }
 }
