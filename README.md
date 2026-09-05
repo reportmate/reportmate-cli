@@ -38,11 +38,11 @@ reportmate devices
 Show one device, or just one of its module documents:
 
 ```
-reportmate device 0F33V9G25083HJ
+reportmate device C00EXAMPLE001
 ```
 
 ```
-reportmate device 0F33V9G25083HJ --module installs
+reportmate device C00EXAMPLE001 --module installs
 ```
 
 Fleet-wide report for any module — `hardware`, `applications`, `installs`, `network`, `security`, `management`, `inventory`, `system`, `peripherals`, `identity` — including nested variants, with arbitrary query parameters passed through:
