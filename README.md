@@ -89,35 +89,35 @@ reportmateutil logs munki --levels error --grep "timed out" --summary
 Show one device, or just one of its module documents:
 
 ```
-reportmateutil device 0F33V9G25083HJ
+reportmateutil device C00EXAMPLE001
 ```
 
 ```
-reportmateutil device 0F33V9G25083HJ --module installs
+reportmateutil device C00EXAMPLE001 --module installs
 ```
 
 Per-device subcommands: `info` (fast summary), `module NAME`, `events`, `installs-log`, `log TOOL`, `usage`:
 
 ```
-reportmateutil device 0F33V9G25083HJ events --limit 20 --type error
+reportmateutil device C00EXAMPLE001 events --limit 20 --type error
 ```
 
 ```
-reportmateutil device 0F33V9G25083HJ log munki
+reportmateutil device C00EXAMPLE001 log munki
 ```
 
 ```
-reportmateutil device 0F33V9G25083HJ usage --days 90 --app Photoshop
+reportmateutil device C00EXAMPLE001 usage --days 90 --app Photoshop
 ```
 
 Lifecycle (admin scope). Delete refuses to run without `--confirm`:
 
 ```
-reportmateutil device 0F33V9G25083HJ archive
+reportmateutil device C00EXAMPLE001 archive
 ```
 
 ```
-reportmateutil device 0F33V9G25083HJ delete --confirm
+reportmateutil device C00EXAMPLE001 delete --confirm
 ```
 
 ## Applications
