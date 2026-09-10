@@ -110,7 +110,7 @@ fn json_arg(arg: String, what: &str) -> Result<Value> {
 /// Restore the default SIGPIPE disposition.
 ///
 /// Rust ignores SIGPIPE by default, so a consumer that closes stdout early
-/// (e.g. `reportmate devices | head`) turns the next write into a panic
+/// (e.g. `reportmateutil devices | head`) turns the next write into a panic
 /// ("failed printing to stdout: Broken pipe") instead of a clean exit.
 /// Restoring SIG_DFL makes the process terminate normally, like any Unix tool.
 #[cfg(unix)]

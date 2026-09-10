@@ -2,17 +2,17 @@ name: release
 
 # Build cross-platform binaries on version tags and attach them to the release.
 #
-# Assets, one tarball each containing a single `reportmate` (or
-# `reportmate.exe`) binary:
-#   reportmate-aarch64-apple-darwin.tar.gz      Apple silicon
-#   reportmate-x86_64-apple-darwin.tar.gz       Intel Mac
-#   reportmate-universal-apple-darwin.tar.gz    both, lipo-merged
-#   ReportMateCLI-<version>.pkg                 unsigned installer of the universal
+# Assets, one tarball each containing a single `reportmateutil` (or
+# `reportmateutil.exe`) binary:
+#   reportmateutil-aarch64-apple-darwin.tar.gz      Apple silicon
+#   reportmateutil-x86_64-apple-darwin.tar.gz       Intel Mac
+#   reportmateutil-universal-apple-darwin.tar.gz    both, lipo-merged
+#   ReportMateUtil-<version>.pkg                 unsigned installer of the universal
 #                                               binary to /usr/local/bin, for fleet
 #                                               management pipelines to sign and ship
-#   reportmate-x86_64-unknown-linux-gnu.tar.gz
-#   reportmate-x86_64-pc-windows-msvc.tar.gz
-#   reportmate-aarch64-pc-windows-msvc.tar.gz
+#   reportmateutil-x86_64-unknown-linux-gnu.tar.gz
+#   reportmateutil-x86_64-pc-windows-msvc.tar.gz
+#   reportmateutil-aarch64-pc-windows-msvc.tar.gz
 on:
   push:
     tags: ["v*"]
@@ -50,15 +50,15 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          bin=reportmate
-          [ "${{ matrix.os }}" = "windows-latest" ] && bin=reportmate.exe
-          tar -czf "reportmate-${{ matrix.target }}.tar.gz" -C "target/${{ matrix.target }}/release" "$bin"
+          bin=reportmateutil
+          [ "${{ matrix.os }}" = "windows-latest" ] && bin=reportmateutil.exe
+          tar -czf "reportmateutil-${{ matrix.target }}.tar.gz" -C "target/${{ matrix.target }}/release" "$bin"
 
       - name: Upload to release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: reportmate-${{ matrix.target }}.tar.gz
+          files: reportmateutil-${{ matrix.target }}.tar.gz
 
   # macOS builds both architectures on one runner so the universal binary can
   # be lipo-merged without shuttling artifacts between jobs.
@@ -83,12 +83,12 @@ jobs:
         run: |
           mkdir -p target/universal-apple-darwin/release
           lipo -create \
-            target/aarch64-apple-darwin/release/reportmate \
-            target/x86_64-apple-darwin/release/reportmate \
-            -output target/universal-apple-darwin/release/reportmate
-          lipo -info target/universal-apple-darwin/release/reportmate
+            target/aarch64-apple-darwin/release/reportmateutil \
+            target/x86_64-apple-darwin/release/reportmateutil \
+            -output target/universal-apple-darwin/release/reportmateutil
+          lipo -info target/universal-apple-darwin/release/reportmateutil
           for t in aarch64-apple-darwin x86_64-apple-darwin universal-apple-darwin; do
-            tar -czf "reportmate-$t.tar.gz" -C "target/$t/release" reportmate
+            tar -czf "reportmateutil-$t.tar.gz" -C "target/$t/release" reportmateutil
           done
 
       # An unsigned installer package for fleet deployment: a management
@@ -100,18 +100,18 @@ jobs:
           echo "$ver" | grep -Eq '^[0-9]+(\.[0-9]+)+$' || ver=0.0.0
           root=$(mktemp -d)
           mkdir -p "$root/usr/local/bin"
-          install -m 755 target/universal-apple-darwin/release/reportmate "$root/usr/local/bin/reportmate"
-          pkgbuild --root "$root" --identifier io.reportmate.cli --version "$ver" \
-            --install-location / "ReportMateCLI-$ver.pkg"
+          install -m 755 target/universal-apple-darwin/release/reportmateutil "$root/usr/local/bin/reportmateutil"
+          pkgbuild --root "$root" --identifier io.reportmate.util --version "$ver" \
+            --install-location / "ReportMateUtil-$ver.pkg"
           rm -rf "$root"
-          ls -l ReportMateCLI-*.pkg
+          ls -l ReportMateUtil-*.pkg
 
       - name: Upload to release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            reportmate-aarch64-apple-darwin.tar.gz
-            reportmate-x86_64-apple-darwin.tar.gz
-            reportmate-universal-apple-darwin.tar.gz
-            ReportMateCLI-*.pkg
+            reportmateutil-aarch64-apple-darwin.tar.gz
+            reportmateutil-x86_64-apple-darwin.tar.gz
+            reportmateutil-universal-apple-darwin.tar.gz
+            ReportMateUtil-*.pkg

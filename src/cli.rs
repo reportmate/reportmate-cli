@@ -9,7 +9,7 @@ pub const VERSION: &str = match option_env!("RM_VERSION") {
 };
 
 #[derive(Parser)]
-#[command(name = "reportmate", version = VERSION, about = "ReportMate admin CLI — query and manage your device fleet")]
+#[command(name = "reportmateutil", version = VERSION, about = "ReportMate admin CLI — query and manage your device fleet")]
 pub struct Cli {
     /// Output format (tables for humans, json for scripts and agents)
     #[arg(long, value_enum, default_value_t = OutputFormat::Table, global = true)]
