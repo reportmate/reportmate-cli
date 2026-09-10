@@ -6,8 +6,10 @@ name: release
 # `reportmate.exe`) binary:
 #   reportmate-aarch64-apple-darwin.tar.gz      Apple silicon
 #   reportmate-x86_64-apple-darwin.tar.gz       Intel Mac
-#   reportmate-universal-apple-darwin.tar.gz    both, lipo-merged (what a
-#                                               fleet package should ship)
+#   reportmate-universal-apple-darwin.tar.gz    both, lipo-merged
+#   ReportMateCLI-<version>.pkg                 unsigned installer of the universal
+#                                               binary to /usr/local/bin, for fleet
+#                                               management pipelines to sign and ship
 #   reportmate-x86_64-unknown-linux-gnu.tar.gz
 #   reportmate-x86_64-pc-windows-msvc.tar.gz
 #   reportmate-aarch64-pc-windows-msvc.tar.gz
@@ -89,6 +91,21 @@ jobs:
             tar -czf "reportmate-$t.tar.gz" -C "target/$t/release" reportmate
           done
 
+      # An unsigned installer package for fleet deployment: a management
+      # pipeline downloads it, signs and notarizes it with its own identity,
+      # and imports it. Installs the universal binary at /usr/local/bin.
+      - name: Build installer package
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          echo "$ver" | grep -Eq '^[0-9]+(\.[0-9]+)+$' || ver=0.0.0
+          root=$(mktemp -d)
+          mkdir -p "$root/usr/local/bin"
+          install -m 755 target/universal-apple-darwin/release/reportmate "$root/usr/local/bin/reportmate"
+          pkgbuild --root "$root" --identifier io.reportmate.cli --version "$ver" \
+            --install-location / "ReportMateCLI-$ver.pkg"
+          rm -rf "$root"
+          ls -l ReportMateCLI-*.pkg
+
       - name: Upload to release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
@@ -97,3 +114,4 @@ jobs:
             reportmate-aarch64-apple-darwin.tar.gz
             reportmate-x86_64-apple-darwin.tar.gz
             reportmate-universal-apple-darwin.tar.gz
+            ReportMateCLI-*.pkg
