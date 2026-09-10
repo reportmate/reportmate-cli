@@ -1,0 +1,55 @@
+name: openapi-sync
+
+# Regenerate tests/openapi.json from the API's own source and open a pull
+# request when it changes. The parity test in tests/routes.rs then fails on
+# that pull request until every new API operation has a CLI command, which is
+# how a route added to the API becomes a visible task here instead of a
+# silent gap.
+#
+# The spec is generated, not fetched: the published copy lags the deployed
+# API, while `scripts/export_openapi.py` reads the FastAPI app directly.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: reportmate/reportmate-api
+          path: api
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Export the spec from the API source
+        working-directory: api
+        run: |
+          pip install -q -r requirements.txt
+          python scripts/export_openapi.py
+          cp docs/api/openapi.json ../tests/openapi.json
+          echo "api_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - uses: peter-evans/create-pull-request@v6
+        with:
+          branch: chore/openapi-sync
+          title: "Sync tests/openapi.json with reportmate-api"
+          commit-message: "Sync tests/openapi.json with reportmate-api"
+          body: |
+            `tests/openapi.json` regenerated from reportmate/reportmate-api at ${{ env.api_sha }}.
+
+            If CI fails on `every_api_operation_has_a_command`, the API gained or dropped
+            an operation: add or remove the command in `src/cli.rs` and its row in
+            `tests/routes.rs`, then push to this branch.
+          add-paths: tests/openapi.json
+          delete-branch: true
