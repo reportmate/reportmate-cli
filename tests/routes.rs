@@ -144,7 +144,11 @@ fn serve(mut stream: TcpStream, log: Arc<Mutex<Vec<Recorded>>>) {
 /// Runs the built binary against the mock with an API key, and nothing
 /// else ReportMate-related in its environment.
 fn reportmate(api: &MockApi, args: &[&str]) -> Output {
-    reportmate_env(api, args, &[("REPORTMATE_API_KEY", "rm_fixture_not_a_real_key")])
+    reportmate_env(
+        api,
+        args,
+        &[("REPORTMATE_API_KEY", "rm_fixture_not_a_real_key")],
+    )
 }
 
 fn reportmate_env(api: &MockApi, args: &[&str], env: &[(&str, &str)]) -> Output {
@@ -449,29 +453,41 @@ fn post_and_put_bodies_are_the_documented_json() {
 fn credentials_map_to_the_api_headers() {
     let api = MockApi::start();
 
-    assert!(
-        reportmate_env(&api, &["health"], &[("REPORTMATE_API_KEY", "rm_fixture_key")])
-            .status
-            .success()
-    );
+    assert!(reportmate_env(
+        &api,
+        &["health"],
+        &[("REPORTMATE_API_KEY", "rm_fixture_key")]
+    )
+    .status
+    .success());
     let sent = api.last();
     assert_eq!(sent.header("x-api-key"), Some("rm_fixture_key"));
     assert_eq!(sent.header("authorization"), None);
     assert_eq!(sent.header("x-client-passphrase"), None);
 
-    assert!(
-        reportmate_env(&api, &["health"], &[("REPORTMATE_TOKEN", "fixture-bearer-token")])
-            .status
-            .success()
+    assert!(reportmate_env(
+        &api,
+        &["health"],
+        &[("REPORTMATE_TOKEN", "fixture-bearer-token")]
+    )
+    .status
+    .success());
+    assert_eq!(
+        api.last().header("authorization"),
+        Some("Bearer fixture-bearer-token")
     );
-    assert_eq!(api.last().header("authorization"), Some("Bearer fixture-bearer-token"));
 
-    assert!(
-        reportmate_env(&api, &["health"], &[("REPORTMATE_PASSPHRASE", "fixture-passphrase")])
-            .status
-            .success()
+    assert!(reportmate_env(
+        &api,
+        &["health"],
+        &[("REPORTMATE_PASSPHRASE", "fixture-passphrase")]
+    )
+    .status
+    .success());
+    assert_eq!(
+        api.last().header("x-client-passphrase"),
+        Some("fixture-passphrase")
     );
-    assert_eq!(api.last().header("x-client-passphrase"), Some("fixture-passphrase"));
 
     // Preference order: key beats token beats passphrase.
     assert!(reportmate_env(
@@ -499,7 +515,10 @@ fn credentials_map_to_the_api_headers() {
     )
     .status
     .success());
-    assert_eq!(api.last().header("x-internal-secret"), Some("fixture-internal"));
+    assert_eq!(
+        api.last().header("x-internal-secret"),
+        Some("fixture-internal")
+    );
 
     let output = reportmate_env(&api, &["health"], &[]);
     assert!(!output.status.success());
