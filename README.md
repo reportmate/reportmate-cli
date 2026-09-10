@@ -283,6 +283,10 @@ Commands that have no table view (device detail, module reports, raw) always pri
 
 The CLI is a thin client over the ReportMate REST API (`/api/v1/*`). It is intentionally platform-agnostic — there is no platform-specific behaviour, so one binary serves macOS, Windows, and Linux admins. Responses currently deserialize as untyped JSON; a future revision will generate a typed client from the API's published OpenAPI spec.
 
+## Contract tests
+
+`cargo test` runs two guards beyond the unit tests. `tests/routes.rs` starts a recording mock of the API and runs every command against it, asserting the exact method, path and query each one sends. The same table names the OpenAPI operation each command implements, and a parity test checks it against `tests/openapi.json`, which is generated from the API repository's own source by the `openapi-sync` workflow (weekly, or on demand). A route added to the API fails the suite until the CLI has a command for it.
+
 ## License
 
 AGPL-3.0-or-later. A commercial license is available — see [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).
