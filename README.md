@@ -8,7 +8,7 @@ The CLI covers the whole `/api/v1` surface: every read, report, maintenance and 
 
 ## Install
 
-Download the binary for your platform from [Releases](https://github.com/reportmate/reportmate-cli/releases), or build from source:
+Download the binary for your platform from [Releases](https://github.com/reportmate/reportmate-cli/releases): one tarball per target, each holding a single `reportmateutil` binary, plus `ReportMateUtil-<version>.pkg`, an unsigned installer of the universal macOS binary. Every push and pull request builds the same set as workflow artifacts, and a `v<calendar-version>` tag publishes them as a release in one step once every platform has built. The ReportMate apps for Mac and Windows bundle the binary from these releases, so a managed machine gets it with the app. Or build from source:
 
 ```
 cargo build --release
