@@ -1,0 +1,156 @@
+name: build
+
+# Builds every platform binary on every push and pull request and keeps them
+# as workflow artifacts, unsigned. On a version tag the same artifacts become
+# the GitHub release, created once, after every build has finished, so a
+# consumer never sees a release that is missing an asset.
+#
+# Assets, one tarball each containing a single `reportmateutil` (or
+# `reportmateutil.exe`) binary:
+#   reportmateutil-aarch64-apple-darwin.tar.gz      Apple silicon
+#   reportmateutil-x86_64-apple-darwin.tar.gz       Intel Mac
+#   reportmateutil-universal-apple-darwin.tar.gz    both, lipo-merged (what the
+#                                                   Mac app bundles)
+#   ReportMateUtil-<version>.pkg                    unsigned installer of the
+#                                                   universal binary to
+#                                                   /usr/local/bin
+#   reportmateutil-x86_64-unknown-linux-gnu.tar.gz
+#   reportmateutil-x86_64-pc-windows-msvc.tar.gz    what the Windows app bundles
+#   reportmateutil-aarch64-pc-windows-msvc.tar.gz
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then export RM_VERSION="${GITHUB_REF_NAME#v}"; fi
+          cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          bin=reportmateutil
+          [ "${{ matrix.os }}" = "windows-latest" ] && bin=reportmateutil.exe
+          mkdir -p dist
+          tar -czf "dist/reportmateutil-${{ matrix.target }}.tar.gz" -C "target/${{ matrix.target }}/release" "$bin"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reportmateutil-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  # macOS builds both architectures on one runner so the universal binary can
+  # be lipo-merged without shuttling artifacts between jobs.
+  build-macos:
+    name: build (macOS arm64, x86_64, universal, pkg)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: macos
+
+      - name: Build
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then export RM_VERSION="${GITHUB_REF_NAME#v}"; fi
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+
+      - name: Package
+        run: |
+          mkdir -p target/universal-apple-darwin/release dist
+          lipo -create \
+            target/aarch64-apple-darwin/release/reportmateutil \
+            target/x86_64-apple-darwin/release/reportmateutil \
+            -output target/universal-apple-darwin/release/reportmateutil
+          lipo -info target/universal-apple-darwin/release/reportmateutil
+          for t in aarch64-apple-darwin x86_64-apple-darwin universal-apple-darwin; do
+            tar -czf "dist/reportmateutil-$t.tar.gz" -C "target/$t/release" reportmateutil
+          done
+
+      # An unsigned installer package for anyone deploying the bare tool: a
+      # management pipeline signs and notarizes it with its own identity.
+      - name: Build installer package
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          echo "$ver" | grep -Eq '^[0-9]+(\.[0-9]+)+$' || ver=0.0.0
+          root=$(mktemp -d)
+          mkdir -p "$root/usr/local/bin"
+          install -m 755 target/universal-apple-darwin/release/reportmateutil "$root/usr/local/bin/reportmateutil"
+          pkgbuild --root "$root" --identifier io.reportmate.util --version "$ver" \
+            --install-location / "dist/ReportMateUtil-$ver.pkg"
+          rm -rf "$root"
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reportmateutil-macos
+          path: dist/*
+          if-no-files-found: error
+
+  # One release, created after every build succeeded, with every asset
+  # attached in the same call.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List assets
+        run: ls -l dist
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
