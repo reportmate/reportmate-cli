@@ -143,16 +143,16 @@ fn serve(mut stream: TcpStream, log: Arc<Mutex<Vec<Recorded>>>) {
 
 /// Runs the built binary against the mock with an API key, and nothing
 /// else ReportMate-related in its environment.
-fn reportmate(api: &MockApi, args: &[&str]) -> Output {
-    reportmate_env(
+fn reportmateutil(api: &MockApi, args: &[&str]) -> Output {
+    reportmateutil_env(
         api,
         args,
         &[("REPORTMATE_API_KEY", "rm_fixture_not_a_real_key")],
     )
 }
 
-fn reportmate_env(api: &MockApi, args: &[&str], env: &[(&str, &str)]) -> Output {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_reportmate"));
+fn reportmateutil_env(api: &MockApi, args: &[&str], env: &[(&str, &str)]) -> Output {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_reportmateutil"));
     for key in [
         "REPORTMATE_API_URL",
         "REPORTMATE_API_KEY",
@@ -166,7 +166,7 @@ fn reportmate_env(api: &MockApi, args: &[&str], env: &[(&str, &str)]) -> Output 
     for (k, v) in env {
         cmd.env(k, v);
     }
-    cmd.args(args).output().expect("run reportmate")
+    cmd.args(args).output().expect("run reportmateutil")
 }
 
 fn stdout(output: &Output) -> String {
@@ -317,7 +317,7 @@ fn every_command_sends_the_documented_request() {
     let api = MockApi::start();
     let mut failures = Vec::new();
     for route in ROUTES {
-        let output = reportmate(&api, route.args);
+        let output = reportmateutil(&api, route.args);
         if !output.status.success() {
             failures.push(format!(
                 "{:?}: exit {} — {}",
@@ -397,7 +397,7 @@ fn every_api_operation_has_a_command() {
 fn post_and_put_bodies_are_the_documented_json() {
     let api = MockApi::start();
 
-    assert!(reportmate(
+    assert!(reportmateutil(
         &api,
         &["api-keys", "create", "ci", "--scope", "read", "--scope", "admin"]
     )
@@ -414,7 +414,7 @@ fn post_and_put_bodies_are_the_documented_json() {
         .unwrap_or("")
         .starts_with("application/json"));
 
-    assert!(reportmate(
+    assert!(reportmateutil(
         &api,
         &["settings", "set", r#"{"a":1}"#, "--updated-by", "rod"]
     )
@@ -432,7 +432,7 @@ fn post_and_put_bodies_are_the_documented_json() {
     let file = dir.join("payload.json");
     std::fs::write(&file, r#"{"metadata":{"serialNumber":"X"},"events":[]}"#).unwrap();
     let arg = format!("@{}", file.display());
-    assert!(reportmate(&api, &["events", "submit", &arg])
+    assert!(reportmateutil(&api, &["events", "submit", &arg])
         .status
         .success());
     assert_eq!(
@@ -440,7 +440,7 @@ fn post_and_put_bodies_are_the_documented_json() {
         serde_json::json!({"metadata": {"serialNumber": "X"}, "events": []})
     );
 
-    let output = reportmate(&api, &["settings", "set", "not json"]);
+    let output = reportmateutil(&api, &["settings", "set", "not json"]);
     assert!(!output.status.success());
     assert!(
         stderr(&output).contains("valid JSON"),
@@ -453,7 +453,7 @@ fn post_and_put_bodies_are_the_documented_json() {
 fn credentials_map_to_the_api_headers() {
     let api = MockApi::start();
 
-    assert!(reportmate_env(
+    assert!(reportmateutil_env(
         &api,
         &["health"],
         &[("REPORTMATE_API_KEY", "rm_fixture_key")]
@@ -465,7 +465,7 @@ fn credentials_map_to_the_api_headers() {
     assert_eq!(sent.header("authorization"), None);
     assert_eq!(sent.header("x-client-passphrase"), None);
 
-    assert!(reportmate_env(
+    assert!(reportmateutil_env(
         &api,
         &["health"],
         &[("REPORTMATE_TOKEN", "fixture-bearer-token")]
@@ -477,7 +477,7 @@ fn credentials_map_to_the_api_headers() {
         Some("Bearer fixture-bearer-token")
     );
 
-    assert!(reportmate_env(
+    assert!(reportmateutil_env(
         &api,
         &["health"],
         &[("REPORTMATE_PASSPHRASE", "fixture-passphrase")]
@@ -490,7 +490,7 @@ fn credentials_map_to_the_api_headers() {
     );
 
     // Preference order: key beats token beats passphrase.
-    assert!(reportmate_env(
+    assert!(reportmateutil_env(
         &api,
         &["health"],
         &[
@@ -505,7 +505,7 @@ fn credentials_map_to_the_api_headers() {
     assert_eq!(sent.header("x-api-key"), Some("rm_fixture_key"));
     assert_eq!(sent.header("authorization"), None);
 
-    assert!(reportmate_env(
+    assert!(reportmateutil_env(
         &api,
         &["settings", "get"],
         &[
@@ -520,7 +520,7 @@ fn credentials_map_to_the_api_headers() {
         Some("fixture-internal")
     );
 
-    let output = reportmate_env(&api, &["health"], &[]);
+    let output = reportmateutil_env(&api, &["health"], &[]);
     assert!(!output.status.success());
     assert!(
         stderr(&output).contains("no credential"),
@@ -532,7 +532,7 @@ fn credentials_map_to_the_api_headers() {
 #[test]
 fn api_errors_fail_with_the_upstream_status() {
     let api = MockApi::start();
-    let output = reportmate(&api, &["raw", "/api/v1/forbidden"]);
+    let output = reportmateutil(&api, &["raw", "/api/v1/forbidden"]);
     assert!(!output.status.success());
     let err = stderr(&output);
     assert!(err.contains("GET /api/v1/forbidden -> 403"), "{err}");
@@ -542,11 +542,11 @@ fn api_errors_fail_with_the_upstream_status() {
 #[test]
 fn text_endpoints_print_their_body_verbatim() {
     let api = MockApi::start();
-    let output = reportmate(&api, &["metrics"]);
+    let output = reportmateutil(&api, &["metrics"]);
     assert!(output.status.success());
     assert_eq!(stdout(&output), "rm_up 1\n");
 
-    let output = reportmate(
+    let output = reportmateutil(
         &api,
         &[
             "admin",
@@ -564,7 +564,7 @@ fn text_endpoints_print_their_body_verbatim() {
     let dir = std::env::temp_dir().join(format!("reportmate-export-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let out = dir.join("august.csv");
-    let output = reportmate(
+    let output = reportmateutil(
         &api,
         &[
             "admin",
@@ -590,7 +590,7 @@ fn text_endpoints_print_their_body_verbatim() {
 #[test]
 fn json_output_is_the_api_body_pretty_printed() {
     let api = MockApi::start();
-    let output = reportmate(&api, &["device", "SER1", "--output", "json"]);
+    let output = reportmateutil(&api, &["device", "SER1", "--output", "json"]);
     assert!(output.status.success());
     let value: serde_json::Value = serde_json::from_str(&stdout(&output)).expect("stdout is JSON");
     assert_eq!(value["path"], "/api/v1/device/SER1");
@@ -599,7 +599,7 @@ fn json_output_is_the_api_body_pretty_printed() {
 #[test]
 fn destructive_commands_refuse_without_confirm() {
     let api = MockApi::start();
-    let output = reportmate(&api, &["device", "SER1", "delete"]);
+    let output = reportmateutil(&api, &["device", "SER1", "delete"]);
     assert!(!output.status.success());
     assert!(stderr(&output).contains("--confirm"));
     assert!(
