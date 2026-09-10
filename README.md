@@ -80,11 +80,11 @@ reportmate logs munki --levels error --grep "timed out" --summary
 Show one device, or just one of its module documents:
 
 ```
-reportmate device 0F33V9G25083HJ
+reportmate device C00EXAMPLE001
 ```
 
 ```
-reportmate device 0F33V9G25083HJ --module installs
+reportmate device C00EXAMPLE001 --module installs
 ```
 
 Per-device subcommands: `info` (fast summary), `module NAME`, `events`, `installs-log`, `log TOOL`, `usage`:
