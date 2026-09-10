@@ -5,6 +5,14 @@ pub fn print_json(v: &Value) {
     println!("{}", serde_json::to_string_pretty(v).unwrap_or_default());
 }
 
+/// Print a text body (CSV, Prometheus exposition) exactly as received.
+pub fn print_text(t: &str) {
+    print!("{t}");
+    if !t.ends_with('\n') {
+        println!();
+    }
+}
+
 /// Render a device list as a table. Accepts either a bare array or an object
 /// with a `devices` array.
 pub fn print_devices_table(v: &Value) {
