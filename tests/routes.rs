@@ -162,6 +162,7 @@ fn reportmateutil_env(api: &MockApi, args: &[&str], env: &[(&str, &str)]) -> Out
     ] {
         cmd.env_remove(key);
     }
+    cmd.env("REPORTMATE_NO_DISCOVERY", "1");
     cmd.env("REPORTMATE_API_URL", &api.url);
     for (k, v) in env {
         cmd.env(k, v);
