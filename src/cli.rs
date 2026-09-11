@@ -143,6 +143,8 @@ pub enum Command {
         include_archived: bool,
     },
     /// API health (liveness by default)
+    /// Show the endpoint and credential the CLI would use, and where each came from
+    Config,
     Health {
         /// Readiness probe (database connectivity)
         #[arg(long, conflicts_with = "full")]
