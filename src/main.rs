@@ -674,10 +674,22 @@ fn print_config(format: OutputFormat) -> anyhow::Result<()> {
             output::print_json(&v);
         }
         OutputFormat::Table => {
-            println!("API endpoint : {}", r.api_url.as_deref().unwrap_or("(none)"));
-            println!("  from       : {}", r.sources.api_url.as_deref().unwrap_or("-"));
-            println!("Credential   : {}", credential_kind.as_deref().unwrap_or("(none)"));
-            println!("  from       : {}", r.sources.credential.as_deref().unwrap_or("-"));
+            println!(
+                "API endpoint : {}",
+                r.api_url.as_deref().unwrap_or("(none)")
+            );
+            println!(
+                "  from       : {}",
+                r.sources.api_url.as_deref().unwrap_or("-")
+            );
+            println!(
+                "Credential   : {}",
+                credential_kind.as_deref().unwrap_or("(none)")
+            );
+            println!(
+                "  from       : {}",
+                r.sources.credential.as_deref().unwrap_or("-")
+            );
             if let Some(a) = &r.sources.audience {
                 println!("Entra audience from : {a}");
             }

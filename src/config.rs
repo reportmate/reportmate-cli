@@ -108,12 +108,26 @@ impl Resolution {
         let mut notes = Vec::new();
         // REPORTMATE_NO_DISCOVERY=1 confines resolution to the environment: for CI,
         // tests and scripts that must not pick up whatever this machine has.
-        let discover = env_value("REPORTMATE_NO_DISCOVERY").map(|v| !matches!(v.as_str(), "1" | "true" | "yes")).unwrap_or(true);
-        let app = if discover { read_app_connection() } else { AppConnection::default() };
-        let runner = if discover { read_runner_prefs() } else { RunnerPrefs { api_url: None, passphrase: None } };
+        let discover = env_value("REPORTMATE_NO_DISCOVERY")
+            .map(|v| !matches!(v.as_str(), "1" | "true" | "yes"))
+            .unwrap_or(true);
+        let app = if discover {
+            read_app_connection()
+        } else {
+            AppConnection::default()
+        };
+        let runner = if discover {
+            read_runner_prefs()
+        } else {
+            RunnerPrefs {
+                api_url: None,
+                passphrase: None,
+            }
+        };
 
         // Endpoint.
-        let mut api_url = env_value("REPORTMATE_API_URL").map(|u| (u, "REPORTMATE_API_URL".to_string()));
+        let mut api_url =
+            env_value("REPORTMATE_API_URL").map(|u| (u, "REPORTMATE_API_URL".to_string()));
         if api_url.is_none() {
             if let Some(u) = app.api_url.clone() {
                 api_url = Some((u, "ReportMate app connection".to_string()));
@@ -130,7 +144,8 @@ impl Resolution {
         });
 
         // Audience for Entra sign-in: env, then the app's saved one.
-        let mut audience = env_value("REPORTMATE_OIDC_AUDIENCE").map(|a| (a, "REPORTMATE_OIDC_AUDIENCE".to_string()));
+        let mut audience = env_value("REPORTMATE_OIDC_AUDIENCE")
+            .map(|a| (a, "REPORTMATE_OIDC_AUDIENCE".to_string()));
         if audience.is_none() {
             if let Some(a) = app.oidc_audience.clone() {
                 audience = Some((a, "ReportMate app connection".to_string()));
@@ -156,27 +171,44 @@ impl Resolution {
                 Some("entraBearer") => {
                     if let Some((aud, _)) = &audience {
                         match az_token(aud) {
-                            Ok(t) => credential = Some((Credential::Bearer(t), "Entra sign-in via az (app connection)".into())),
+                            Ok(t) => {
+                                credential = Some((
+                                    Credential::Bearer(t),
+                                    "Entra sign-in via az (app connection)".into(),
+                                ))
+                            }
                             Err(e) => notes.push(format!("Entra sign-in: {e}")),
                         }
                     }
                 }
                 Some("apiKey") => {
                     if let Some(k) = read_app_secret("ApiKey") {
-                        credential = Some((Credential::ApiKey(k), "ReportMate app connection (API key)".into()));
+                        credential = Some((
+                            Credential::ApiKey(k),
+                            "ReportMate app connection (API key)".into(),
+                        ));
                     }
                 }
                 Some("passphrase") => {
                     if let Some(p) = read_app_secret("Passphrase") {
-                        credential = Some((Credential::Passphrase(p), "ReportMate app connection (passphrase)".into()));
+                        credential = Some((
+                            Credential::Passphrase(p),
+                            "ReportMate app connection (passphrase)".into(),
+                        ));
                     }
                 }
                 _ => {
                     // No method recorded: take whatever secret the app holds.
                     if let Some(k) = read_app_secret("ApiKey") {
-                        credential = Some((Credential::ApiKey(k), "ReportMate app connection (API key)".into()));
+                        credential = Some((
+                            Credential::ApiKey(k),
+                            "ReportMate app connection (API key)".into(),
+                        ));
                     } else if let Some(p) = read_app_secret("Passphrase") {
-                        credential = Some((Credential::Passphrase(p), "ReportMate app connection (passphrase)".into()));
+                        credential = Some((
+                            Credential::Passphrase(p),
+                            "ReportMate app connection (passphrase)".into(),
+                        ));
                     }
                 }
             }
@@ -185,7 +217,10 @@ impl Resolution {
         // The runner's shared passphrase (its API key is ingest-only).
         if credential.is_none() {
             if let Some(p) = runner.passphrase.clone() {
-                credential = Some((Credential::Passphrase(p), "device runner preferences (passphrase)".into()));
+                credential = Some((
+                    Credential::Passphrase(p),
+                    "device runner preferences (passphrase)".into(),
+                ));
             }
         }
 
@@ -193,17 +228,29 @@ impl Resolution {
         if credential.is_none() && discover {
             if let Some((aud, _)) = &audience {
                 match az_token(aud) {
-                    Ok(t) => credential = Some((Credential::Bearer(t), "Entra sign-in via az".into())),
+                    Ok(t) => {
+                        credential = Some((Credential::Bearer(t), "Entra sign-in via az".into()))
+                    }
                     Err(e) => notes.push(format!("Entra sign-in: {e}")),
                 }
             }
         }
         if credential.is_none() && discover {
-            let cloud = app.cloud.clone().or_else(|| env_value("REPORTMATE_CLOUD")).or_else(|| api_url.as_deref().and_then(detect_cloud));
+            let cloud = app
+                .cloud
+                .clone()
+                .or_else(|| env_value("REPORTMATE_CLOUD"))
+                .or_else(|| api_url.as_deref().and_then(detect_cloud));
             if cloud.as_deref() == Some("aws") {
-                let secret_id = env_value("REPORTMATE_AWS_SECRET_ID").unwrap_or_else(|| "reportmate/client-passphrase".to_string());
+                let secret_id = env_value("REPORTMATE_AWS_SECRET_ID")
+                    .unwrap_or_else(|| "reportmate/client-passphrase".to_string());
                 match aws_secret(&secret_id) {
-                    Ok(p) => credential = Some((Credential::Passphrase(p), format!("AWS Secrets Manager {secret_id}"))),
+                    Ok(p) => {
+                        credential = Some((
+                            Credential::Passphrase(p),
+                            format!("AWS Secrets Manager {secret_id}"),
+                        ))
+                    }
                     Err(e) => notes.push(format!("AWS Secrets Manager {secret_id}: {e}")),
                 }
             }
@@ -225,15 +272,31 @@ impl Resolution {
 }
 
 fn env_value(name: &str) -> Option<String> {
-    std::env::var(name).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+    std::env::var(name)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 /// `aws` for an AWS-hosted API, `azure` for an Azure one, by the host alone.
 pub fn detect_cloud(api_url: &str) -> Option<String> {
-    let host = api_url.split("//").nth(1).unwrap_or(api_url).split('/').next().unwrap_or("").to_ascii_lowercase();
-    if host.ends_with(".amazonaws.com") || host.contains(".execute-api.") || host.ends_with(".awsapprunner.com") {
+    let host = api_url
+        .split("//")
+        .nth(1)
+        .unwrap_or(api_url)
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if host.ends_with(".amazonaws.com")
+        || host.contains(".execute-api.")
+        || host.ends_with(".awsapprunner.com")
+    {
         Some("aws".into())
-    } else if host.ends_with(".azurecontainerapps.io") || host.ends_with(".azurewebsites.net") || host.ends_with(".azure-api.net") {
+    } else if host.ends_with(".azurecontainerapps.io")
+        || host.ends_with(".azurewebsites.net")
+        || host.ends_with(".azure-api.net")
+    {
         Some("azure".into())
     } else {
         None
@@ -263,7 +326,12 @@ fn read_app_connection() -> AppConnection {
 
 pub fn parse_connection_json(text: &str) -> Option<AppConnection> {
     let v: serde_json::Value = serde_json::from_str(text).ok()?;
-    let s = |k: &str| v.get(k).and_then(|x| x.as_str()).map(|x| x.trim().to_string()).filter(|x| !x.is_empty());
+    let s = |k: &str| {
+        v.get(k)
+            .and_then(|x| x.as_str())
+            .map(|x| x.trim().to_string())
+            .filter(|x| !x.is_empty())
+    };
     Some(AppConnection {
         api_url: s("apiUrl").or_else(|| s("apiBaseUrl")),
         auth_method: s("authMethod"),
@@ -278,7 +346,11 @@ fn connection_file_path() -> Option<PathBuf> {
         Some(PathBuf::from(home).join("Library/Application Support/ReportMate/connection.json"))
     } else if cfg!(target_os = "windows") {
         let base = std::env::var_os("ProgramData")?;
-        Some(PathBuf::from(base).join("ReportMate").join("connection.json"))
+        Some(
+            PathBuf::from(base)
+                .join("ReportMate")
+                .join("connection.json"),
+        )
     } else {
         let base = std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)
@@ -300,7 +372,17 @@ fn keychain_item(account: &str) -> Option<String> {
     if !cfg!(target_os = "macos") {
         return None;
     }
-    run_stdout("security", &["find-generic-password", "-s", "com.github.reportmate.mac", "-a", account, "-w"])
+    run_stdout(
+        "security",
+        &[
+            "find-generic-password",
+            "-s",
+            "com.github.reportmate.mac",
+            "-a",
+            account,
+            "-w",
+        ],
+    )
 }
 
 /// The device runner's endpoint and shared passphrase on this machine.
@@ -321,7 +403,10 @@ fn read_runner_prefs() -> RunnerPrefs {
             passphrase: registry_value(r"HKLM\SOFTWARE\ReportMate", "Passphrase"),
         }
     } else {
-        RunnerPrefs { api_url: None, passphrase: None }
+        RunnerPrefs {
+            api_url: None,
+            passphrase: None,
+        }
     }
 }
 
@@ -351,10 +436,28 @@ pub fn parse_reg_query(out: &str, name: &str) -> Option<String> {
 
 /// A delegated token for the API's Entra audience from the caller's `az login`.
 fn az_token(audience: &str) -> Result<String> {
-    let az = if cfg!(target_os = "windows") { "az.cmd" } else { "az" };
-    match run_stdout(az, &["account", "get-access-token", "--resource", audience, "--query", "accessToken", "-o", "tsv"]) {
+    let az = if cfg!(target_os = "windows") {
+        "az.cmd"
+    } else {
+        "az"
+    };
+    match run_stdout(
+        az,
+        &[
+            "account",
+            "get-access-token",
+            "--resource",
+            audience,
+            "--query",
+            "accessToken",
+            "-o",
+            "tsv",
+        ],
+    ) {
         Some(t) => Ok(t),
-        None => bail!("az account get-access-token --resource {audience} returned nothing (run az login)"),
+        None => bail!(
+            "az account get-access-token --resource {audience} returned nothing (run az login)"
+        ),
     }
 }
 
@@ -386,8 +489,14 @@ mod tests {
 
     #[test]
     fn detects_cloud_from_host() {
-        assert_eq!(detect_cloud("https://api.prod.azurecontainerapps.io"), Some("azure".into()));
-        assert_eq!(detect_cloud("https://abc.execute-api.us-west-2.amazonaws.com/v1"), Some("aws".into()));
+        assert_eq!(
+            detect_cloud("https://api.prod.azurecontainerapps.io"),
+            Some("azure".into())
+        );
+        assert_eq!(
+            detect_cloud("https://abc.execute-api.us-west-2.amazonaws.com/v1"),
+            Some("aws".into())
+        );
         assert_eq!(detect_cloud("https://api.example.org"), None);
     }
 
@@ -403,7 +512,10 @@ mod tests {
     #[test]
     fn parses_reg_query_output() {
         let out = "\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\ReportMate\r\n    ApiUrl    REG_SZ    https://api.example.org\r\n\r\n";
-        assert_eq!(parse_reg_query(out, "ApiUrl").as_deref(), Some("https://api.example.org"));
+        assert_eq!(
+            parse_reg_query(out, "ApiUrl").as_deref(),
+            Some("https://api.example.org")
+        );
         assert_eq!(parse_reg_query(out, "Passphrase"), None);
     }
 }
