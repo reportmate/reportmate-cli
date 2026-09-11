@@ -598,6 +598,61 @@ async fn admin(client: &Client, cmd: AdminCommand) -> Result<()> {
     Ok(())
 }
 
+/// `reportmateutil config`: the resolved endpoint, the credential kind and the
+/// source of each, with no secret material.
+fn print_config(format: OutputFormat) -> anyhow::Result<()> {
+    let r = config::Resolution::resolve();
+    let credential_kind = r.credential.as_ref().map(|c| c.kind().to_string());
+    match format {
+        OutputFormat::Json => {
+            let v = serde_json::json!({
+                "apiUrl": r.api_url,
+                "apiUrlSource": r.sources.api_url,
+                "credential": credential_kind,
+                "credentialSource": r.sources.credential,
+                "audienceSource": r.sources.audience,
+                "internalSecret": r.internal_secret.is_some(),
+                "notes": r.notes,
+            });
+            output::print_json(&v);
+        }
+        OutputFormat::Table => {
+            println!(
+                "API endpoint : {}",
+                r.api_url.as_deref().unwrap_or("(none)")
+            );
+            println!(
+                "  from       : {}",
+                r.sources.api_url.as_deref().unwrap_or("-")
+            );
+            println!(
+                "Credential   : {}",
+                credential_kind.as_deref().unwrap_or("(none)")
+            );
+            println!(
+                "  from       : {}",
+                r.sources.credential.as_deref().unwrap_or("-")
+            );
+            if let Some(a) = &r.sources.audience {
+                println!("Entra audience from : {a}");
+            }
+            if r.internal_secret.is_some() {
+                println!("Internal secret     : set (REPORTMATE_INTERNAL_SECRET)");
+            }
+            for n in &r.notes {
+                println!("Note: {n}");
+            }
+            if r.api_url.is_none() || r.credential.is_none() {
+                println!();
+                println!("Resolution order: environment (REPORTMATE_API_URL, REPORTMATE_TOKEN / REPORTMATE_API_KEY / REPORTMATE_PASSPHRASE),");
+                println!("the ReportMate app's saved connection on this machine, the device runner's preferences,");
+                println!("then the deployment's cloud sign-in (az login for an Entra audience, aws sso login for AWS).");
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{query_string, urlencode, Query};
@@ -653,59 +708,4 @@ mod tests {
         assert_eq!(q.path("/x"), "/x?a=1&b=two&c=3");
         assert!(Query::new().params(&["novalue".to_string()]).is_err());
     }
-}
-
-/// `reportmateutil config`: the resolved endpoint, the credential kind and the
-/// source of each, with no secret material.
-fn print_config(format: OutputFormat) -> anyhow::Result<()> {
-    let r = config::Resolution::resolve();
-    let credential_kind = r.credential.as_ref().map(|c| c.kind().to_string());
-    match format {
-        OutputFormat::Json => {
-            let v = serde_json::json!({
-                "apiUrl": r.api_url,
-                "apiUrlSource": r.sources.api_url,
-                "credential": credential_kind,
-                "credentialSource": r.sources.credential,
-                "audienceSource": r.sources.audience,
-                "internalSecret": r.internal_secret.is_some(),
-                "notes": r.notes,
-            });
-            output::print_json(&v);
-        }
-        OutputFormat::Table => {
-            println!(
-                "API endpoint : {}",
-                r.api_url.as_deref().unwrap_or("(none)")
-            );
-            println!(
-                "  from       : {}",
-                r.sources.api_url.as_deref().unwrap_or("-")
-            );
-            println!(
-                "Credential   : {}",
-                credential_kind.as_deref().unwrap_or("(none)")
-            );
-            println!(
-                "  from       : {}",
-                r.sources.credential.as_deref().unwrap_or("-")
-            );
-            if let Some(a) = &r.sources.audience {
-                println!("Entra audience from : {a}");
-            }
-            if r.internal_secret.is_some() {
-                println!("Internal secret     : set (REPORTMATE_INTERNAL_SECRET)");
-            }
-            for n in &r.notes {
-                println!("Note: {n}");
-            }
-            if r.api_url.is_none() || r.credential.is_none() {
-                println!();
-                println!("Resolution order: environment (REPORTMATE_API_URL, REPORTMATE_TOKEN / REPORTMATE_API_KEY / REPORTMATE_PASSPHRASE),");
-                println!("the ReportMate app's saved connection on this machine, the device runner's preferences,");
-                println!("then the deployment's cloud sign-in (az login for an Entra audience, aws sso login for AWS).");
-            }
-        }
-    }
-    Ok(())
 }
