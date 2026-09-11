@@ -121,6 +121,7 @@ impl Resolution {
         } else {
             RunnerPrefs {
                 api_url: None,
+                read_api_key: None,
                 passphrase: None,
             }
         };
@@ -388,6 +389,7 @@ fn keychain_item(account: &str) -> Option<String> {
 /// The device runner's endpoint and shared passphrase on this machine.
 struct RunnerPrefs {
     api_url: Option<String>,
+    read_api_key: Option<String>,
     passphrase: Option<String>,
 }
 
@@ -395,19 +397,37 @@ fn read_runner_prefs() -> RunnerPrefs {
     if cfg!(target_os = "macos") {
         RunnerPrefs {
             api_url: run_stdout("defaults", &["read", "com.github.reportmate", "ApiUrl"]),
+            read_api_key: None,
             passphrase: run_stdout("defaults", &["read", "com.github.reportmate", "Passphrase"]),
         }
     } else if cfg!(target_os = "windows") {
+        // The Windows runner and the admin app share one configuration: the base
+        // key, then Settings (what the app writes), then Policies (Intune CSP or
+        // GPO, which wins). ReadApiKey is the read-scoped key the app prefers;
+        // ApiKey is the runner's ingest-only key and is never used for reads.
         RunnerPrefs {
-            api_url: registry_value(r"HKLM\SOFTWARE\ReportMate", "ApiUrl"),
-            passphrase: registry_value(r"HKLM\SOFTWARE\ReportMate", "Passphrase"),
+            api_url: registry_first("ApiUrl"),
+            read_api_key: registry_first("ReadApiKey"),
+            passphrase: registry_first("Passphrase"),
         }
     } else {
         RunnerPrefs {
             api_url: None,
+            read_api_key: None,
             passphrase: None,
         }
     }
+}
+
+/// The first of Policies, Settings and the base key that holds `name`.
+fn registry_first(name: &str) -> Option<String> {
+    [
+        r"HKLM\SOFTWARE\Policies\ReportMate",
+        r"HKLM\SOFTWARE\ReportMate\Settings",
+        r"HKLM\SOFTWARE\ReportMate",
+    ]
+    .iter()
+    .find_map(|k| registry_value(k, name))
 }
 
 fn registry_value(key: &str, name: &str) -> Option<String> {

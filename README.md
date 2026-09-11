@@ -21,7 +21,7 @@ The binary is `target/release/reportmateutil`.
 On an admin machine that runs the ReportMate app there is nothing to configure: the CLI resolves its endpoint and credential from, in order, the environment, the app's saved connection, the device runner's preferences, and the deployment's cloud sign-in. `reportmateutil config` shows what it found and where each value came from.
 
 - The app leaves its non-secret connection (endpoint, auth method, Entra audience) in `~/Library/Application Support/ReportMate/connection.json` on macOS and `%ProgramData%\ReportMate\connection.json` on Windows. An API key or passphrase comes from the app's macOS Keychain item (macOS asks once to allow the CLI); an Entra sign-in needs no secret, the CLI mints a token with `az account get-access-token` for the app's audience.
-- With no app, the runner's own endpoint and shared passphrase are used (macOS `com.github.reportmate` preferences, Windows `HKLM\SOFTWARE\ReportMate`). The runner's API key is ingest-only and never used for reads.
+- With no app, the runner's own endpoint and credential are used: macOS `com.github.reportmate` preferences (endpoint and shared passphrase), Windows `HKLM\SOFTWARE\ReportMate` with its Settings and Policies subkeys (endpoint, `ReadApiKey`, then passphrase). The runner's ingest-only `ApiKey` is never used for reads.
 - With neither, the deployment's cloud: an Entra audience in `REPORTMATE_OIDC_AUDIENCE` is exchanged through `az`; an AWS-hosted API reads the client passphrase from Secrets Manager (`REPORTMATE_AWS_SECRET_ID`, default `reportmate/client-passphrase`) with your `aws` session.
 
 Set `REPORTMATE_NO_DISCOVERY=1` to confine resolution to the environment (CI, scripts that must not pick up the machine's connection).
