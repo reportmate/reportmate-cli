@@ -34,7 +34,6 @@ pub struct Config {
     pub api_url: String,
     pub credential: Credential,
     pub internal_secret: Option<String>,
-    pub sources: Sources,
 }
 
 pub enum Credential {
@@ -90,7 +89,6 @@ impl Config {
             api_url,
             credential,
             internal_secret: r.internal_secret,
-            sources: r.sources,
         })
     }
 }
