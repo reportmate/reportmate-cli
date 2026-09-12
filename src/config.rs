@@ -15,8 +15,8 @@ use anyhow::{bail, Result};
 /// 2. The ReportMate admin app's saved connection on this machine: the
 ///    non-secret part from `connection.json` (macOS:
 ///    `~/Library/Application Support/ReportMate/`, Windows:
-///    `%ProgramData%\ReportMate\`), the secret from the macOS Keychain
-///    (service `com.github.reportmate.mac`, the app's own items).
+///    `%ProgramData%\ReportMate\`); an API key or passphrase, and only that,
+///    from the macOS Keychain item the app wrote (macOS asks once to allow it).
 /// 3. Entra sign-in for the deployment, ahead of any shared secret: the
 ///    audience from the environment, the app, or the API's own
 ///    `/api/v1/auth/config`, exchanged for a token through
@@ -326,22 +326,13 @@ pub fn detect_cloud(api_url: &str) -> Option<String> {
 /// The app's shared `connection.json` (non-secret), plus the macOS Keychain's
 /// non-secret items when the file is absent.
 fn read_app_connection() -> AppConnection {
-    let mut conn = connection_file_path()
+    // Only the file: reading the app's Keychain items makes macOS ask the user to
+    // allow it, so the Keychain is touched solely for an API key or passphrase the
+    // app says it uses, never for the endpoint, method or audience.
+    connection_file_path()
         .and_then(|p| std::fs::read_to_string(p).ok())
         .and_then(|s| parse_connection_json(&s))
-        .unwrap_or_default();
-    if cfg!(target_os = "macos") {
-        if conn.api_url.is_none() {
-            conn.api_url = keychain_item("ApiBaseUrl");
-        }
-        if conn.auth_method.is_none() {
-            conn.auth_method = keychain_item("AuthMethod");
-        }
-        if conn.oidc_audience.is_none() {
-            conn.oidc_audience = keychain_item("OidcAudience");
-        }
-    }
-    conn
+        .unwrap_or_default()
 }
 
 pub fn parse_connection_json(text: &str) -> Option<AppConnection> {
