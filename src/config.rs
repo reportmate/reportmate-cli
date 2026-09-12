@@ -17,13 +17,14 @@ use anyhow::{bail, Result};
 ///    `~/Library/Application Support/ReportMate/`, Windows:
 ///    `%ProgramData%\ReportMate\`), the secret from the macOS Keychain
 ///    (service `com.github.reportmate.mac`, the app's own items).
-/// 3. The device runner's own preferences (macOS `com.github.reportmate`
+/// 3. Entra sign-in for the deployment, ahead of any shared secret: the
+///    audience from the environment, the app, or the API's own
+///    `/api/v1/auth/config`, exchanged for a token through
+///    `az account get-access-token`.
+/// 4. The device runner's own preferences (macOS `com.github.reportmate`
 ///    domain, Windows `HKLM\SOFTWARE\ReportMate`): the API URL and the
 ///    shared passphrase. The runner's API key is ingest-only and never used.
-/// 4. Cloud sign-in for the deployment: an Entra audience (`api://…` or an
-///    app id) is exchanged for a token through `az account get-access-token`,
-///    the way the Mac app's Entra sign-in works; an AWS deployment reads the
-///    client passphrase from Secrets Manager (`REPORTMATE_AWS_SECRET_ID`,
+/// 5. An AWS deployment reads the client passphrase from Secrets Manager (`REPORTMATE_AWS_SECRET_ID`,
 ///    default `reportmate/client-passphrase`) with the caller's AWS session.
 ///
 /// `REPORTMATE_NO_DISCOVERY=1` confines resolution to the environment.
@@ -70,8 +71,8 @@ pub struct AppConnection {
 }
 
 impl Config {
-    pub fn load() -> Result<Config> {
-        let r = Resolution::resolve();
+    pub async fn load() -> Result<Config> {
+        let r = Resolution::resolve().await;
         let api_url = match r.api_url {
             Some(u) => u,
             None => bail!(
@@ -103,7 +104,7 @@ pub struct Resolution {
 }
 
 impl Resolution {
-    pub fn resolve() -> Resolution {
+    pub async fn resolve() -> Resolution {
         let mut sources = Sources::default();
         let mut notes = Vec::new();
         // REPORTMATE_NO_DISCOVERY=1 confines resolution to the environment: for CI,
@@ -215,18 +216,18 @@ impl Resolution {
             }
         }
 
-        // The runner's shared passphrase (its API key is ingest-only).
-        if credential.is_none() {
-            if let Some(p) = runner.passphrase.clone() {
-                credential = Some((
-                    Credential::Passphrase(p),
-                    "device runner preferences (passphrase)".into(),
-                ));
-            }
-        }
-
-        // Cloud sign-in for the deployment.
+        // Entra sign-in for the deployment, ahead of any shared secret on the
+        // machine: the audience comes from the environment, the app, or the API's
+        // own /auth/config, and the token from the caller's az login.
         if credential.is_none() && discover {
+            if audience.is_none() {
+                if let Some(url) = &api_url {
+                    if let Some(a) = discover_audience(url).await {
+                        audience = Some((a, "API /auth/config".to_string()));
+                        sources.audience = Some("API /auth/config".into());
+                    }
+                }
+            }
             if let Some((aud, _)) = &audience {
                 match az_token(aud) {
                     Ok(t) => {
@@ -236,6 +237,24 @@ impl Resolution {
                 }
             }
         }
+
+        // The runner's read key (Windows ReadApiKey) or shared passphrase; its
+        // ingest-only API key is never used.
+        if credential.is_none() {
+            if let Some(k) = runner.read_api_key.clone() {
+                credential = Some((
+                    Credential::ApiKey(k),
+                    "device runner preferences (ReadApiKey)".into(),
+                ));
+            } else if let Some(p) = runner.passphrase.clone() {
+                credential = Some((
+                    Credential::Passphrase(p),
+                    "device runner preferences (passphrase)".into(),
+                ));
+            }
+        }
+
+        // An AWS-hosted deployment: the client passphrase from Secrets Manager.
         if credential.is_none() && discover {
             let cloud = app
                 .cloud
@@ -537,5 +556,62 @@ mod tests {
             Some("https://api.example.org")
         );
         assert_eq!(parse_reg_query(out, "Passphrase"), None);
+    }
+}
+
+/// The OIDC audience the API advertises at `/api/v1/auth/config`, when it
+/// has bearer auth switched on. A short timeout: this runs before every
+/// command that has nothing else to go on.
+async fn discover_audience(api_url: &str) -> Option<String> {
+    let http = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .ok()?;
+    let body = http
+        .get(format!(
+            "{}/api/v1/auth/config",
+            api_url.trim_end_matches('/')
+        ))
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .text()
+        .await
+        .ok()?;
+    audience_from_auth_config(&body)
+}
+
+/// The audience in an `/auth/config` document, when OIDC is enabled there.
+pub fn audience_from_auth_config(body: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(body).ok()?;
+    let oidc = v.get("oidc")?;
+    if oidc.get("enabled").and_then(|e| e.as_bool()) != Some(true) {
+        return None;
+    }
+    oidc.get("audience")
+        .and_then(|a| a.as_str())
+        .map(|a| a.trim().to_string())
+        .filter(|a| !a.is_empty())
+}
+
+#[cfg(test)]
+mod auth_config_tests {
+    use super::*;
+
+    #[test]
+    fn reads_the_audience_only_when_oidc_is_on() {
+        assert_eq!(
+            audience_from_auth_config(r#"{"oidc":{"enabled":true,"audience":"api://sample"}}"#)
+                .as_deref(),
+            Some("api://sample")
+        );
+        assert_eq!(
+            audience_from_auth_config(r#"{"oidc":{"enabled":false,"audience":"api://sample"}}"#),
+            None
+        );
+        assert_eq!(audience_from_auth_config("{}"), None);
+        assert_eq!(audience_from_auth_config("nope"), None);
     }
 }
