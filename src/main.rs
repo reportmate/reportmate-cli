@@ -128,9 +128,9 @@ async fn main() -> Result<()> {
     reset_sigpipe();
     let args = Cli::parse();
     if matches!(args.command, Command::Config) {
-        return print_config(args.output);
+        return print_config(args.output).await;
     }
-    let cfg = config::Config::load()?;
+    let cfg = config::Config::load().await?;
     let client = Client::new(cfg)?;
 
     match args.command {
@@ -600,8 +600,8 @@ async fn admin(client: &Client, cmd: AdminCommand) -> Result<()> {
 
 /// `reportmateutil config`: the resolved endpoint, the credential kind and the
 /// source of each, with no secret material.
-fn print_config(format: OutputFormat) -> anyhow::Result<()> {
-    let r = config::Resolution::resolve();
+async fn print_config(format: OutputFormat) -> anyhow::Result<()> {
+    let r = config::Resolution::resolve().await;
     let credential_kind = r.credential.as_ref().map(|c| c.kind().to_string());
     match format {
         OutputFormat::Json => {
