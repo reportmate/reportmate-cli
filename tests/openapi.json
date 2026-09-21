@@ -463,7 +463,7 @@
           "devices"
         ],
         "summary": "Delete Device",
-        "description": "Permanently delete a device and all its data.\n\n**WARNING: This is a DESTRUCTIVE operation!**\n\nDeletion removes:\n- Device record from devices table\n- All module data (cascading delete via foreign keys)\n- All events history\n- ALL historical data - cannot be recovered\n\nThis should only be used for:\n- Test devices that should not exist\n- Duplicate records\n- Data cleanup/GDPR compliance\n\n**RECOMMENDATION:** Use archive instead of delete to preserve historical data!\n\nQuery Parameters:\n- confirm: Must be set to true to confirm deletion (safety check)\n\n**Authentication Required:**\n- Windows clients: X-API-PASSPHRASE header\n- Azure resources: X-MS-CLIENT-PRINCIPAL-ID header (Managed Identity)",
+        "description": "Permanently delete a device and all its data.\n\n**WARNING: This is a DESTRUCTIVE operation!**\n\nDeletion removes:\n- Device record from devices table\n- Every module row for the device, deleted explicitly: the module tables\n  are created by the ingestion path, not by a migration, and none of them\n  declares a foreign key to devices, so nothing cascades\n- All events history\n- ALL historical data - cannot be recovered\n\nThis should only be used for:\n- Test devices that should not exist\n- Duplicate records\n- Data cleanup/GDPR compliance\n\n**RECOMMENDATION:** Use archive instead of delete to preserve historical data!\n\nQuery Parameters:\n- confirm: Must be set to true to confirm deletion (safety check)\n\n**Authentication Required:**\n- Windows clients: X-API-PASSPHRASE header\n- Azure resources: X-MS-CLIENT-PRINCIPAL-ID header (Managed Identity)",
         "operationId": "delete_device_api_v1_device__serial_number__delete",
         "parameters": [
           {
@@ -4121,7 +4121,7 @@
           "fleet"
         ],
         "summary": "Get Bulk System",
-        "description": "Bulk system endpoint for fleet-wide OS and system information.\n\nReturns devices with OS details, uptime, updates, services, etc.\nUsed by /devices/system page for fleet-wide system visibility.\nBy default, archived devices are excluded. Use includeArchived=true to include them.\n\nlimit/offset page the response, matching /management and /installs/full. Omitting\nlimit returns every device; a fixed default would truncate the fleet silently once\nit grew past that number, which is the failure this endpoint already had.\n\n**Response includes:**\n- Device identifiers and inventory\n- Operating system name, version, build number\n- System uptime, boot time\n- Pending updates and service status (in raw field)",
+        "description": "Bulk system endpoint for fleet-wide OS and system information.\n\nReturns devices with OS details, uptime, updates, services, etc.\nUsed by /devices/system page for fleet-wide system visibility.\nBy default, archived devices are excluded. Use includeArchived=true to include them.\n\nlimit/offset page the response, matching /management and /installs/full. Omitting\nlimit returns every device; a fixed default would truncate the fleet silently once\nit grew past that number, which is the failure this endpoint already had.\n\n**Response includes:**\n- Device identifiers and inventory\n- Operating system name, version, build number\n- System uptime, boot time\n- Pending-update counts and normalized installed-update identities\n- Service and scheduled-task counts",
         "operationId": "get_bulk_system_api_v1_system_get",
         "parameters": [
           {
@@ -6830,6 +6830,249 @@
         }
       }
     },
+    "/api/v1/admin/orphans": {
+      "get": {
+        "tags": [
+          "admin",
+          "admin"
+        ],
+        "summary": "Orphaned Module Rows",
+        "description": "Module rows whose device no longer exists.\n\nEvery fleet-wide query joins a module table to ``devices``, so a module row\nwhose ``device_id`` matches no device contributes to nothing: its errors are\nabsent from the dashboard tiles, its items from the installs page, its\napplications from the inventory. The row is still there, still counted by\nthe reclassify pass, and still invisible.\n\nThey should not exist -- ingest writes the device row before any module row,\nand deleting a device cascades -- so a non-zero count here is evidence of a\ndelete that did not cascade, or of a device row whose id and serial number\ndisagree. Read-only: this reports them and removes nothing.",
+        "operationId": "orphaned_module_rows_api_v1_admin_orphans_get",
+        "parameters": [
+          {
+            "name": "samples",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 0,
+              "default": 5,
+              "title": "Samples"
+            }
+          },
+          {
+            "name": "X-API-PASSPHRASE",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Api-Passphrase"
+            }
+          },
+          {
+            "name": "X-Client-Passphrase",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Client-Passphrase"
+            }
+          },
+          {
+            "name": "X-Internal-Secret",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Internal-Secret"
+            }
+          },
+          {
+            "name": "X-MS-CLIENT-PRINCIPAL-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Ms-Client-Principal-Id"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "X-Forwarded-For",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Forwarded-For"
+            }
+          },
+          {
+            "name": "User-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "User-Agent"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin",
+          "admin"
+        ],
+        "summary": "Delete Orphaned Module Rows",
+        "description": "Delete the module rows of specific orphaned device ids.\n\nDeliberately not a blanket sweep. An orphan is a module row whose device\nrow is gone, and the reason it is gone matters: a machine that is still in\ninventory and might check in again deserves to keep its history, while a\ntest id or a hostname-keyed duplicate does not. So the caller names the ids,\nhaving decided that, and this refuses any id that is not actually an orphan\n-- naming a live device deletes nothing.\n\nIrreversible, and separate from ``DELETE /device/{serial}``, which is for\ndevices that still exist.\n\n**Authentication Required:**\n- Windows clients: X-API-PASSPHRASE header\n- Azure resources: X-MS-CLIENT-PRINCIPAL-ID header (Managed Identity)",
+        "operationId": "delete_orphaned_module_rows_api_v1_admin_orphans_delete",
+        "parameters": [
+          {
+            "name": "device_ids",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Comma-separated device ids to clean up; each must be an orphan",
+              "title": "Device Ids"
+            },
+            "description": "Comma-separated device ids to clean up; each must be an orphan"
+          },
+          {
+            "name": "confirm",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Must be true to delete",
+              "default": false,
+              "title": "Confirm"
+            },
+            "description": "Must be true to delete"
+          },
+          {
+            "name": "X-API-PASSPHRASE",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Api-Passphrase"
+            }
+          },
+          {
+            "name": "X-Client-Passphrase",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Client-Passphrase"
+            }
+          },
+          {
+            "name": "X-Internal-Secret",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Internal-Secret"
+            }
+          },
+          {
+            "name": "X-MS-CLIENT-PRINCIPAL-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Ms-Client-Principal-Id"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "X-Forwarded-For",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Forwarded-For"
+            }
+          },
+          {
+            "name": "User-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "User-Agent"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/debug/database": {
       "get": {
         "tags": [
@@ -7602,6 +7845,26 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/config": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Auth Config",
+        "description": "Which credentials this deployment accepts, and the OIDC details a\nclient needs to mint a bearer token for it.",
+        "operationId": "auth_config_api_v1_auth_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           }
