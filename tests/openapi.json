@@ -463,7 +463,7 @@
           "devices"
         ],
         "summary": "Delete Device",
-        "description": "Permanently delete a device and all its data.\n\n**WARNING: This is a DESTRUCTIVE operation!**\n\nDeletion removes:\n- Device record from devices table\n- All module data (cascading delete via foreign keys)\n- All events history\n- ALL historical data - cannot be recovered\n\nThis should only be used for:\n- Test devices that should not exist\n- Duplicate records\n- Data cleanup/GDPR compliance\n\n**RECOMMENDATION:** Use archive instead of delete to preserve historical data!\n\nQuery Parameters:\n- confirm: Must be set to true to confirm deletion (safety check)\n\n**Authentication Required:**\n- Windows clients: X-API-PASSPHRASE header\n- Azure resources: X-MS-CLIENT-PRINCIPAL-ID header (Managed Identity)",
+        "description": "Permanently delete a device and all its data.\n\n**WARNING: This is a DESTRUCTIVE operation!**\n\nDeletion removes:\n- Device record from devices table\n- Every module row for the device, deleted explicitly: the module tables\n  are created by the ingestion path, not by a migration, and none of them\n  declares a foreign key to devices, so nothing cascades\n- All events history\n- ALL historical data - cannot be recovered\n\nThis should only be used for:\n- Test devices that should not exist\n- Duplicate records\n- Data cleanup/GDPR compliance\n\n**RECOMMENDATION:** Use archive instead of delete to preserve historical data!\n\nQuery Parameters:\n- confirm: Must be set to true to confirm deletion (safety check)\n\n**Authentication Required:**\n- Windows clients: X-API-PASSPHRASE header\n- Azure resources: X-MS-CLIENT-PRINCIPAL-ID header (Managed Identity)",
         "operationId": "delete_device_api_v1_device__serial_number__delete",
         "parameters": [
           {
@@ -4121,7 +4121,7 @@
           "fleet"
         ],
         "summary": "Get Bulk System",
-        "description": "Bulk system endpoint for fleet-wide OS and system information.\n\nReturns devices with OS details, uptime, updates, services, etc.\nUsed by /devices/system page for fleet-wide system visibility.\nBy default, archived devices are excluded. Use includeArchived=true to include them.\n\nlimit/offset page the response, matching /management and /installs/full. Omitting\nlimit returns every device; a fixed default would truncate the fleet silently once\nit grew past that number, which is the failure this endpoint already had.\n\n**Response includes:**\n- Device identifiers and inventory\n- Operating system name, version, build number\n- System uptime, boot time\n- Pending updates and service status (in raw field)",
+        "description": "Bulk system endpoint for fleet-wide OS and system information.\n\nReturns devices with OS details, uptime, updates, services, etc.\nUsed by /devices/system page for fleet-wide system visibility.\nBy default, archived devices are excluded. Use includeArchived=true to include them.\n\nlimit/offset page the response, matching /management and /installs/full. Omitting\nlimit returns every device; a fixed default would truncate the fleet silently once\nit grew past that number, which is the failure this endpoint already had.\n\n**Response includes:**\n- Device identifiers and inventory\n- Operating system name, version, build number\n- System uptime, boot time\n- Pending-update counts and normalized installed-update identities\n- Service and scheduled-task counts",
         "operationId": "get_bulk_system_api_v1_system_get",
         "parameters": [
           {
@@ -5240,7 +5240,7 @@
           "events"
         ],
         "summary": "Get Ingest Failures",
-        "description": "Rejected device check-ins (failed registrations).\n\nEvery device request that was turned away -- bad or missing credentials,\nmalformed payload, invalid serial -- is recorded with whatever identity\nthe device presented. This answers \"the client was installed but the\ndevice never appeared\": if the machine reached the server at all, it is\nlisted here with the reason it was rejected.\n\nReason codes: auth -> invalid_passphrase, invalid_api_key,\ninvalid_bearer_token, invalid_internal_secret, missing_credentials,\ninsufficient_scope; validation -> upload_aborted, body_unreadable,\nempty_body, malformed_json, invalid_payload, empty_serial,\nsentinel_serial, short_serial, hostname_serial, serial_equals_hostname,\nnul_in_payload, usage_out_of_bounds; throttle -> rate_limited;\nserver_error -> internal_error, usage_write_failed.\n\nrate_limited and internal_error are recorded at the status the caller\nactually received. usage_write_failed is recorded at 500 even though the\ncheck-in returned 200: the device was not turned away, but its usage rows\nwere lost server-side, and data loss belongs in the default view rather\nthan filed under repairs. nul_in_payload and usage_out_of_bounds are recorded at\n200 -- the check-in was accepted, but it carried a client defect worth\nseeing.\n\nThose two are therefore NOT failures, and ``outcome`` keeps them out of a\nview whose whole promise is \"these devices did not get through\". A client\ndefect that the server repairs can be several thousand rows a day -- large\nenough to bury the handful of genuinely rejected devices this page exists\nto surface -- while still being worth watching until the client-side fix\nrolls out.\n\nupload_aborted / body_unreadable / empty_body are transport failures --\nthe device reached the server but its payload did not arrive intact.\nmalformed_json means a body that arrived and did not parse. The detail\ncarries declared vs received byte counts so the two stay separable.\n\nA transport failure is only a failed check-in if nothing arrived\nafterwards. The clients retry three times with backoff, so a dropped\nupload is normally resent down a fresh connection seconds later and the\ndata lands; counting the dropped attempt as a device that was turned away\ndescribes an outage that is not happening. A transport row whose device\nhas a later successful check-in is therefore ``retried``, not\n``rejected``. Only transport reasons qualify: a malformed body or a bad\npassphrase is resent identically, so a later success says nothing about\nthat check-in.\n\noutcome is derived from the recorded status and devices.last_seen rather\nthan a stored flag, so it reads correctly over history as well, and a row\nreclassifies on its own as soon as the device gets back in.\ncounts.rejected / counts.retried / counts.accepted are always all present\nso the other sides are one click away rather than invisible.",
+        "description": "Rejected device check-ins (failed registrations).\n\nEvery device request that was turned away -- bad or missing credentials,\nmalformed payload, invalid serial -- is recorded with whatever identity\nthe device presented. This answers \"the client was installed but the\ndevice never appeared\": if the machine reached the server at all, it is\nlisted here with the reason it was rejected.\n\nReason codes: auth -> invalid_passphrase, invalid_api_key,\ninvalid_bearer_token, invalid_internal_secret, missing_credentials,\ninsufficient_scope; validation -> upload_aborted, body_unreadable,\nempty_body, malformed_json, invalid_payload, empty_serial,\nsentinel_serial, short_serial, hostname_serial, serial_equals_hostname,\nnul_in_payload, usage_out_of_bounds; throttle -> rate_limited;\nserver_error -> internal_error, usage_write_failed.\n\nrate_limited and internal_error are recorded at the status the caller\nactually received. usage_write_failed is recorded at 500 even though the\ncheck-in returned 200: the device was not turned away, but its usage rows\nwere lost server-side, and data loss belongs in the default view rather\nthan filed under repairs. nul_in_payload and usage_out_of_bounds are recorded at\n200 -- the check-in was accepted, but it carried a client defect worth\nseeing.\n\nThose two are therefore NOT failures, and ``outcome`` keeps them out of a\nview whose whole promise is \"these devices did not get through\". A client\ndefect that the server repairs can be several thousand rows a day -- large\nenough to bury the handful of genuinely rejected devices this page exists\nto surface -- while still being worth watching until the client-side fix\nrolls out.\n\nupload_aborted / body_unreadable / empty_body are transport failures --\nthe device reached the server but its payload did not arrive intact.\nmalformed_json means a body that arrived and did not parse. The detail\ncarries declared vs received byte counts so the two stay separable.\n\nA transport failure is only a failed check-in if nothing arrived\nafterwards. Both clients make up to three attempts per check-in, 1s then\n2s apart (MaxRetryAttempts), and the next scheduled run sends again if\nthose are spent. A dropped upload is therefore normally resent down a\nfresh connection seconds later and the data lands; counting the dropped\nattempt as a device that was turned away describes an outage that is not\nhappening. A transport row whose device\nhas a later successful check-in is therefore ``retried``, not\n``rejected``. Only transport reasons qualify: a malformed body or a bad\npassphrase is resent identically, so a later success says nothing about\nthat check-in.\n\noutcome is derived from the recorded status and the server-side successful\ningest watermark rather than a stored flag, so it reads correctly over\nhistory as well, and a row reclassifies as soon as the device gets back in.\ncounts.rejected / counts.retried / counts.accepted are always all present\nso the other sides are one click away rather than invisible.",
         "operationId": "get_ingest_failures_api_v1_events_failures_get",
         "parameters": [
           {
@@ -5549,7 +5549,7 @@
           "statistics"
         ],
         "summary": "Get Dashboard Data",
-        "description": "Consolidated dashboard endpoint - fetches all dashboard data in a single API call.\n\nCombines:\n- All devices with full OS data (eliminates need for individual device fetches)\n- Install statistics (devicesWithErrors, devicesWithWarnings, totalFailedInstalls)\n- Recent events (for dashboard event widget)\n\nThis eliminates 10+ separate API calls from the dashboard, dramatically improving load time.\n\nReturns:\n    {\n        \"devices\": [...],           # Full device list with OS data\n        \"totalDevices\": int,        # Total device count\n        \"installStats\": {...},      # Install error/warning counts\n        \"events\": [...],            # Recent events for widget\n        \"totalEvents\": int,         # Total recent events count\n        \"lastUpdated\": str          # ISO8601 timestamp\n    }",
+        "description": "Consolidated dashboard endpoint - fetches all dashboard data in a single API call.\n\nCombines:\n- All devices with full OS data (eliminates need for individual device fetches)\n- Install statistics (devicesWithErrors, devicesWithWarnings, totalFailedInstalls)\n- Recent events (for dashboard event widget)\n\nThis eliminates 10+ separate API calls from the dashboard, dramatically improving load time.\n\nReturns:\n    {\n        \"devices\": [...],           # Full device list with OS data\n        \"totalDevices\": int,        # Fleet count, stored devices excluded\n        \"storageDevices\": int,      # Devices an inventory says are in storage\n        \"installStats\": {...},      # Install error/warning counts\n        \"events\": [...],            # Recent events for widget\n        \"totalEvents\": int,         # Total recent events count\n        \"lastUpdated\": str          # ISO8601 timestamp\n    }",
         "operationId": "get_dashboard_data_api_v1_dashboard_get",
         "parameters": [
           {
@@ -6301,7 +6301,7 @@
           "admin"
         ],
         "summary": "Reset Usage History Baseline",
-        "description": "Archive and remove usage_history rows before a cutoff date.\n\n**This is a DESTRUCTIVE operation on the live reporting table.**\n\nWhy it exists: usage_history accumulates client-sent window deltas, so a\nclient-side counting defect is written into the table permanently and\ncannot be recomputed from anything the server still holds. Correcting one\nmeans removing the affected rows. Every row is copied verbatim into\nusage_history_archive first, so the reset is recoverable and \"what did we\nreport before\" stays answerable.\n\nNot the same as /admin/usage-history/cleanup, which enforces a minimum\nretention of one month and exists for routine ageing-out. This takes an\nexplicit cutoff so a term baseline can start clean, and it archives rather\nthan discards.\n\nWithout ``confirm=true`` this returns a preview of exactly what would be\naffected and changes nothing. Run the preview first.",
+        "description": "Archive and remove usage_history rows before a cutoff date.\n\nWith ``device`` the reset is limited to those serial numbers, for the case\nwhere one client build wrote bad rows and the rest of the fleet is sound.\n\n**This is a DESTRUCTIVE operation on the live reporting table.**\n\nWhy it exists: usage_history accumulates client-sent window deltas, so a\nclient-side counting defect is written into the table permanently and\ncannot be recomputed from anything the server still holds. Correcting one\nmeans removing the affected rows. Every row is copied verbatim into\nusage_history_archive first, so the reset is recoverable and \"what did we\nreport before\" stays answerable.\n\nNot the same as /admin/usage-history/cleanup, which enforces a minimum\nretention of one month and exists for routine ageing-out. This takes an\nexplicit cutoff so a term baseline can start clean, and it archives rather\nthan discards.\n\nWithout ``confirm=true`` this returns a preview of exactly what would be\naffected and changes nothing. Run the preview first.",
         "operationId": "reset_usage_history_baseline_api_v1_admin_usage_history_reset_baseline_post",
         "parameters": [
           {
@@ -6338,6 +6338,27 @@
               "title": "Reason"
             },
             "description": "Recorded on the archived rows so a batch can be identified later"
+          },
+          {
+            "name": "device",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Limit the reset to these serial numbers; repeat for several",
+              "title": "Device"
+            },
+            "description": "Limit the reset to these serial numbers; repeat for several"
           },
           {
             "name": "X-API-PASSPHRASE",
@@ -6734,6 +6755,249 @@
               "title": "Limit"
             },
             "description": "Stop after this many rows, for a rehearsal against part of the fleet"
+          },
+          {
+            "name": "X-API-PASSPHRASE",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Api-Passphrase"
+            }
+          },
+          {
+            "name": "X-Client-Passphrase",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Client-Passphrase"
+            }
+          },
+          {
+            "name": "X-Internal-Secret",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Internal-Secret"
+            }
+          },
+          {
+            "name": "X-MS-CLIENT-PRINCIPAL-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Ms-Client-Principal-Id"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "X-Forwarded-For",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Forwarded-For"
+            }
+          },
+          {
+            "name": "User-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "User-Agent"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/orphans": {
+      "get": {
+        "tags": [
+          "admin",
+          "admin"
+        ],
+        "summary": "Orphaned Module Rows",
+        "description": "Module rows whose device no longer exists.\n\nEvery fleet-wide query joins a module table to ``devices``, so a module row\nwhose ``device_id`` matches no device contributes to nothing: its errors are\nabsent from the dashboard tiles, its items from the installs page, its\napplications from the inventory. The row is still there, still counted by\nthe reclassify pass, and still invisible.\n\nThey should not exist -- ingest writes the device row before any module row,\nand deleting a device cascades -- so a non-zero count here is evidence of a\ndelete that did not cascade, or of a device row whose id and serial number\ndisagree. Read-only: this reports them and removes nothing.",
+        "operationId": "orphaned_module_rows_api_v1_admin_orphans_get",
+        "parameters": [
+          {
+            "name": "samples",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 0,
+              "default": 5,
+              "title": "Samples"
+            }
+          },
+          {
+            "name": "X-API-PASSPHRASE",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Api-Passphrase"
+            }
+          },
+          {
+            "name": "X-Client-Passphrase",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Client-Passphrase"
+            }
+          },
+          {
+            "name": "X-Internal-Secret",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Internal-Secret"
+            }
+          },
+          {
+            "name": "X-MS-CLIENT-PRINCIPAL-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Ms-Client-Principal-Id"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "X-Forwarded-For",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Forwarded-For"
+            }
+          },
+          {
+            "name": "User-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "User-Agent"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin",
+          "admin"
+        ],
+        "summary": "Delete Orphaned Module Rows",
+        "description": "Delete the module rows of specific orphaned device ids.\n\nDeliberately not a blanket sweep. An orphan is a module row whose device\nrow is gone, and the reason it is gone matters: a machine that is still in\ninventory and might check in again deserves to keep its history, while a\ntest id or a hostname-keyed duplicate does not. So the caller names the ids,\nhaving decided that, and this refuses any id that is not actually an orphan\n-- naming a live device deletes nothing.\n\nIrreversible, and separate from ``DELETE /device/{serial}``, which is for\ndevices that still exist.\n\n**Authentication Required:**\n- Windows clients: X-API-PASSPHRASE header\n- Azure resources: X-MS-CLIENT-PRINCIPAL-ID header (Managed Identity)",
+        "operationId": "delete_orphaned_module_rows_api_v1_admin_orphans_delete",
+        "parameters": [
+          {
+            "name": "device_ids",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Comma-separated device ids to clean up; each must be an orphan",
+              "title": "Device Ids"
+            },
+            "description": "Comma-separated device ids to clean up; each must be an orphan"
+          },
+          {
+            "name": "confirm",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Must be true to delete",
+              "default": false,
+              "title": "Confirm"
+            },
+            "description": "Must be true to delete"
           },
           {
             "name": "X-API-PASSPHRASE",
@@ -7608,6 +7872,242 @@
         }
       }
     },
+    "/api/v1/auth/config": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Auth Config",
+        "description": "Which credentials this deployment accepts, and the OIDC details a\nclient needs to mint a bearer token for it.",
+        "operationId": "auth_config_api_v1_auth_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inventory-state": {
+      "get": {
+        "tags": [
+          "inventory-state"
+        ],
+        "summary": "Get Inventory State",
+        "description": "Every device's inventory state, keyed by upper-cased serial number.",
+        "operationId": "get_inventory_state_api_v1_inventory_state_get",
+        "parameters": [
+          {
+            "name": "X-API-PASSPHRASE",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Api-Passphrase"
+            }
+          },
+          {
+            "name": "X-Client-Passphrase",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Client-Passphrase"
+            }
+          },
+          {
+            "name": "X-Internal-Secret",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Internal-Secret"
+            }
+          },
+          {
+            "name": "X-MS-CLIENT-PRINCIPAL-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Ms-Client-Principal-Id"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "X-Forwarded-For",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Forwarded-For"
+            }
+          },
+          {
+            "name": "User-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "User-Agent"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "inventory-state"
+        ],
+        "summary": "Put Inventory State",
+        "description": "Write inventory states in bulk; ``replace`` makes the payload the whole truth.",
+        "operationId": "put_inventory_state_api_v1_inventory_state_put",
+        "parameters": [
+          {
+            "name": "X-API-PASSPHRASE",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Api-Passphrase"
+            }
+          },
+          {
+            "name": "X-Client-Passphrase",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Client-Passphrase"
+            }
+          },
+          {
+            "name": "X-Internal-Secret",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Internal-Secret"
+            }
+          },
+          {
+            "name": "X-MS-CLIENT-PRINCIPAL-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Ms-Client-Principal-Id"
+            }
+          },
+          {
+            "name": "X-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "X-Forwarded-For",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "X-Forwarded-For"
+            }
+          },
+          {
+            "name": "User-Agent",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "User-Agent"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventoryStateWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "tags": [
@@ -7881,6 +8381,18 @@
                 "type": "null"
               }
             ]
+          },
+          "inventoryState": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventorystate"
           }
         },
         "type": "object",
@@ -8174,6 +8686,88 @@
         ],
         "title": "HealthResponse",
         "description": "Response from /api/health."
+      },
+      "InventoryStateEntry": {
+        "properties": {
+          "serialNumber": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Serialnumber"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "checked_out",
+              "storage",
+              "decommissioning"
+            ],
+            "title": "State"
+          },
+          "storageLocation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storagelocation"
+          },
+          "leaseNumber": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leasenumber"
+          },
+          "assetTag": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assettag"
+          }
+        },
+        "type": "object",
+        "required": [
+          "serialNumber",
+          "state"
+        ],
+        "title": "InventoryStateEntry"
+      },
+      "InventoryStateWrite": {
+        "properties": {
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryStateEntry"
+            },
+            "type": "array",
+            "title": "Devices"
+          },
+          "replace": {
+            "type": "boolean",
+            "title": "Replace",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "devices"
+        ],
+        "title": "InventoryStateWrite"
       },
       "InventorySummary": {
         "properties": {
