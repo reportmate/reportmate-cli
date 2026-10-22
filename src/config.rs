@@ -598,7 +598,11 @@ mod auth_config_tests {
             None
         );
         assert_eq!(audience_from_auth_config("{}"), None);
-        for refused in ["https://graph.microsoft.com", "00000003-0000-0000-c000-000000000000", "https://vault.azure.net"] {
+        for refused in [
+            "https://graph.microsoft.com",
+            "00000003-0000-0000-c000-000000000000",
+            "https://vault.azure.net",
+        ] {
             let body = format!(r#"{{"oidc":{{"enabled":true,"audience":"{refused}"}}}}"#);
             assert_eq!(audience_from_auth_config(&body), None);
         }
@@ -616,7 +620,10 @@ pub fn is_trusted_discovery_url(api_url: &str) -> bool {
     };
     match url.scheme() {
         "https" => url.host_str().is_some(),
-        "http" => matches!(url.host_str(), Some("localhost") | Some("127.0.0.1") | Some("[::1]")),
+        "http" => matches!(
+            url.host_str(),
+            Some("localhost") | Some("127.0.0.1") | Some("[::1]")
+        ),
         _ => false,
     }
 }
