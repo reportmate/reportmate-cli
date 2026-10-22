@@ -15,8 +15,9 @@ use anyhow::{bail, Result};
 /// 2. The ReportMate admin app's saved connection on this machine: the
 ///    non-secret part from `connection.json` (macOS:
 ///    `~/Library/Application Support/ReportMate/`, Windows:
-///    `%ProgramData%\ReportMate\`); an API key or passphrase, and only that,
-///    from the macOS Keychain item the app wrote (macOS asks once to allow it).
+///    `%ProgramData%\ReportMate\`). The app stores no secret, so an API key or
+///    passphrase it uses comes from a managed profile for its macOS domain
+///    (`com.github.reportmate.mac`). The CLI never reads the Keychain.
 /// 3. Entra sign-in for the deployment, ahead of any shared secret: the
 ///    audience from the environment, the app, or the API's own
 ///    `/api/v1/auth/config`, exchanged for a token through
@@ -187,7 +188,7 @@ impl Resolution {
                     if let Some(k) = read_app_secret("ApiKey") {
                         credential = Some((
                             Credential::ApiKey(k),
-                            "ReportMate app connection (API key)".into(),
+                            "ReportMate app managed profile (API key)".into(),
                         ));
                     }
                 }
@@ -195,7 +196,7 @@ impl Resolution {
                     if let Some(p) = read_app_secret("Passphrase") {
                         credential = Some((
                             Credential::Passphrase(p),
-                            "ReportMate app connection (passphrase)".into(),
+                            "ReportMate app managed profile (passphrase)".into(),
                         ));
                     }
                 }
@@ -204,12 +205,12 @@ impl Resolution {
                     if let Some(k) = read_app_secret("ApiKey") {
                         credential = Some((
                             Credential::ApiKey(k),
-                            "ReportMate app connection (API key)".into(),
+                            "ReportMate app managed profile (API key)".into(),
                         ));
                     } else if let Some(p) = read_app_secret("Passphrase") {
                         credential = Some((
                             Credential::Passphrase(p),
-                            "ReportMate app connection (passphrase)".into(),
+                            "ReportMate app managed profile (passphrase)".into(),
                         ));
                     }
                 }
@@ -323,12 +324,8 @@ pub fn detect_cloud(api_url: &str) -> Option<String> {
     }
 }
 
-/// The app's shared `connection.json` (non-secret), plus the macOS Keychain's
-/// non-secret items when the file is absent.
+/// The app's shared `connection.json`, which holds nothing secret.
 fn read_app_connection() -> AppConnection {
-    // Only the file: reading the app's Keychain items makes macOS ask the user to
-    // allow it, so the Keychain is touched solely for an API key or passphrase the
-    // app says it uses, never for the endpoint, method or audience.
     connection_file_path()
         .and_then(|p| std::fs::read_to_string(p).ok())
         .and_then(|s| parse_connection_json(&s))
@@ -370,30 +367,22 @@ fn connection_file_path() -> Option<PathBuf> {
     }
 }
 
-/// A secret the admin app saved: the macOS Keychain item of the app's service.
+/// An API key or passphrase a configuration profile forces for the admin app's
+/// macOS domain. The app never writes a secret and the CLI never reads the
+/// Keychain, which would make macOS ask for the login password.
 fn read_app_secret(account: &str) -> Option<String> {
     if cfg!(target_os = "macos") {
-        keychain_item(account)
+        run_stdout(
+            "defaults",
+            &[
+                "read",
+                "/Library/Managed Preferences/com.github.reportmate.mac",
+                account,
+            ],
+        )
     } else {
         None
     }
-}
-
-fn keychain_item(account: &str) -> Option<String> {
-    if !cfg!(target_os = "macos") {
-        return None;
-    }
-    run_stdout(
-        "security",
-        &[
-            "find-generic-password",
-            "-s",
-            "com.github.reportmate.mac",
-            "-a",
-            account,
-            "-w",
-        ],
-    )
 }
 
 /// The device runner's endpoint and shared passphrase on this machine.
@@ -554,6 +543,11 @@ mod tests {
 /// has bearer auth switched on. A short timeout: this runs before every
 /// command that has nothing else to go on.
 async fn discover_audience(api_url: &str) -> Option<String> {
+    // The CLI mints an az token for whatever audience this returns and sends it
+    // to the same server, so only ask over https (http only to this machine).
+    if !is_trusted_discovery_url(api_url) {
+        return None;
+    }
     let http = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -584,6 +578,7 @@ pub fn audience_from_auth_config(body: &str) -> Option<String> {
     oidc.get("audience")
         .and_then(|a| a.as_str())
         .map(|a| a.trim().to_string())
+        .filter(|a| is_acceptable_audience(a))
         .filter(|a| !a.is_empty())
 }
 
@@ -603,6 +598,36 @@ mod auth_config_tests {
             None
         );
         assert_eq!(audience_from_auth_config("{}"), None);
+        for refused in ["https://graph.microsoft.com", "00000003-0000-0000-c000-000000000000", "https://vault.azure.net"] {
+            let body = format!(r#"{{"oidc":{{"enabled":true,"audience":"{refused}"}}}}"#);
+            assert_eq!(audience_from_auth_config(&body), None);
+        }
+        assert!(is_trusted_discovery_url("https://api.example.invalid"));
+        assert!(is_trusted_discovery_url("http://localhost:8000"));
+        assert!(!is_trusted_discovery_url("http://api.example.invalid"));
         assert_eq!(audience_from_auth_config("nope"), None);
     }
+}
+
+/// Discovery runs only over https, or plain http to this machine for development.
+pub fn is_trusted_discovery_url(api_url: &str) -> bool {
+    let Ok(url) = reqwest::Url::parse(api_url.trim()) else {
+        return false;
+    };
+    match url.scheme() {
+        "https" => url.host_str().is_some(),
+        "http" => matches!(url.host_str(), Some("localhost") | Some("127.0.0.1") | Some("[::1]")),
+        _ => false,
+    }
+}
+
+/// An advertised audience must be an `api://` application ID URI. A bare
+/// application ID can name Microsoft Graph or another first-party app, and a URL
+/// (graph.microsoft.com, management.azure.com, a vault or storage account) would
+/// have the CLI mint a token for that resource and hand it to the server.
+pub fn is_acceptable_audience(audience: &str) -> bool {
+    let a = audience.trim();
+    a.len() > "api://".len()
+        && a[..6].eq_ignore_ascii_case("api://")
+        && !a.chars().any(char::is_whitespace)
 }
