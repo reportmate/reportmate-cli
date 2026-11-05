@@ -56,7 +56,7 @@ List the fleet (add `--limit`, `--offset`, `--include-archived` to page):
 reportmateutil devices
 ```
 
-Fleet-wide report for any module — `hardware`, `applications`, `installs`, `network`, `security`, `management`, `inventory`, `system`, `peripherals`, `identity`, `profiles` — including nested variants. `--include-archived`, `--limit` and `--offset` are typed; anything else passes through with `--param`:
+Fleet-wide report for any module — `hardware`, `applications`, `installs`, `network`, `security`, `management`, `inventory`, `system`, `peripherals`, `identity` — including nested variants. `--include-archived`, `--limit` and `--offset` are typed; anything else passes through with `--param`:
 
 ```
 reportmateutil module hardware --limit 100
