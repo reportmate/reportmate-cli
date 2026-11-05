@@ -233,7 +233,6 @@ const ROUTES: &[Route] = &[
     route!(["module", "system"] => "GET" "/api/v1/system" as "/api/v1/system"),
     route!(["module", "peripherals"] => "GET" "/api/v1/peripherals" as "/api/v1/peripherals"),
     route!(["module", "identity"] => "GET" "/api/v1/identity" as "/api/v1/identity"),
-    route!(["module", "profiles"] => "GET" "/api/v1/profiles" as "/api/v1/profiles"),
     route!(["dashboard", "--events-limit", "50", "--include-archived"]
         => "GET" "/api/v1/dashboard?eventsLimit=50&includeArchived=true" as "/api/v1/dashboard"),
     route!(["certificates", "--search", "acme", "--status", "expiring", "--limit", "20"]

@@ -45,7 +45,7 @@ pub enum Command {
     },
     /// Fleet-wide report for any module (hardware, applications, installs,
     /// network, security, management, inventory, system, peripherals,
-    /// identity, profiles — plus variants like installs/full)
+    /// identity — plus variants like installs/full)
     Module {
         /// Module path under /api/v1/ (e.g. "hardware", "installs/full")
         name: String,
